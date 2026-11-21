@@ -1,0 +1,1559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DailyHelper — Interactive Prototype</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .phone-frame {
+      width: 360px;
+      height: 800px;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased p-4 md:p-6">
+
+  <!-- Minimal Prototype Preview Toolbar -->
+  <div class="max-w-5xl mx-auto mb-5 flex flex-wrap items-center justify-between gap-3 bg-[var(--card)] border border-[var(--border)] rounded-2xl px-4 py-3 shadow-sm">
+    <div class="flex items-center gap-2.5">
+      <span class="w-7 h-7 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center">DH</span>
+      <span class="text-sm font-semibold text-[var(--foreground)]">DailyHelper Prototype</span>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="inline-flex rounded-xl border border-[var(--border)] bg-[var(--content)] p-1" id="viewportSwitcher"></div>
+      <div class="inline-flex rounded-xl border border-[var(--border)] bg-[var(--content)] p-1" id="rolePreviewSwitcher"></div>
+      <button onclick="toggleLanguage()" class="px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--content)] text-[var(--foreground)] text-xs font-medium hover:bg-[var(--secondary)] transition">
+        🌐 हिंदी / EN
+      </button>
+      <button onclick="resetDemo()" class="px-3 py-1.5 rounded-xl border border-[var(--border)] text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
+        Reset
+      </button>
+    </div>
+  </div>
+
+  <!-- Stage Container -->
+  <div id="stageContainer" class="max-w-5xl mx-auto flex flex-wrap justify-center items-start gap-8"></div>
+
+  <script>
+    const I18N = {
+      en: {
+        appName: 'DailyHelper',
+        exploreTab: 'Explore',
+        bookingsTab: 'Bookings',
+        jobsTab: 'Jobs',
+        khataTab: 'Rates & Khata',
+        searchPlaceholder: 'Search service or describe issue...',
+        bookBtn: 'Book',
+        visitLabel: 'visit',
+        settingsTitle: 'Account & Settings',
+        signInTitle: 'Sign in to DailyHelper',
+        signUpTitle: 'Create your account',
+        signInBtn: 'Sign In',
+        createAccBtn: 'Create Account',
+        googleBtn: 'Continue with Google',
+        signOutBtn: 'Sign Out',
+        proWorkspace: 'Professional Workspace',
+        proWorkspaceSub: 'Manage job requests, rates & Khata',
+        customerWorkspace: 'Browse & Book Helpers',
+        customerWorkspaceSub: 'Find electricians, plumbers & more',
+        notificationsLabel: 'Notifications & 60m Reminders',
+        languageLabel: 'Language',
+        moreOptions: 'More Options',
+        exportKhata: 'Export Khata (.CSV)',
+        reportBug: 'Report a Bug',
+        safetyGuide: 'Visit Fee & Fair-Play Policy',
+        availableToggle: 'Available for bookings',
+        newRequests: 'New Requests',
+        upcomingJobs: 'Upcoming Schedule',
+        acceptBtn: 'Accept',
+        declineBtn: 'Decline',
+        startWorkBtn: 'Start Work',
+        completeBtn: 'Complete & Collect',
+        callBtn: 'Call',
+        khataSummary: 'Earnings Summary (0% Fee)',
+        today: 'Today',
+        thisMonth: 'This Month',
+        completed: 'Jobs',
+        myRates: 'Rates & Slots',
+        visitFee: 'Visit Fee',
+        hourlyRate: 'Hourly Rate',
+        confirmBooking: 'Confirm Booking',
+        back: 'Back'
+      },
+      hi: {
+        appName: 'DailyHelper',
+        exploreTab: 'खोजें',
+        bookingsTab: 'बुकिंग',
+        jobsTab: 'काम',
+        khataTab: 'रेट और खाता',
+        searchPlaceholder: 'काम खोजें (जैसे: बिजली, नल लीक)...',
+        bookBtn: 'बुक करें',
+        visitLabel: 'विज़िट',
+        settingsTitle: 'खाता और सेटिंग्स',
+        signInTitle: 'DailyHelper में साइन इन करें',
+        signUpTitle: 'नया खाता बनाएं',
+        signInBtn: 'साइन इन करें',
+        createAccBtn: 'खाता बनाएं',
+        googleBtn: 'Google से जारी रखें',
+        signOutBtn: 'साइन आउट',
+        proWorkspace: 'प्रोफेशनल वर्कस्पेस (काम पाएं)',
+        proWorkspaceSub: 'बुकिंग रिक्वेस्ट, रेट और खाता संभालें',
+        customerWorkspace: 'कारीगर खोजें और बुक करें',
+        customerWorkspaceSub: 'इलेक्ट्रीशियन, प्लंबर आदि बुक करें',
+        notificationsLabel: 'नोटिफिकेशन और रिमाइंडर',
+        languageLabel: 'भाषा (Language)',
+        moreOptions: 'अन्य विकल्प',
+        exportKhata: 'खाता एक्सपोर्ट करें (.CSV)',
+        reportBug: 'समस्या रिपोर्ट करें (Report Bug)',
+        safetyGuide: 'विज़िट शुल्क और नियम',
+        availableToggle: 'बुकिंग के लिए उपलब्ध',
+        newRequests: 'नई रिक्वेस्ट',
+        upcomingJobs: 'आने वाले काम',
+        acceptBtn: 'स्वीकार करें',
+        declineBtn: 'मना करें',
+        startWorkBtn: 'काम शुरू करें',
+        completeBtn: 'काम पूरा · पेमेंट लें',
+        callBtn: 'कॉल',
+        khataSummary: 'कमाई का ब्यौरा (0% कमीशन)',
+        today: 'आज',
+        thisMonth: 'इस महीने',
+        completed: 'काम',
+        myRates: 'मेरा रेट और समय',
+        visitFee: 'विज़िट शुल्क',
+        hourlyRate: 'प्रति घंटा',
+        confirmBooking: 'बुकिंग कन्फर्म करें',
+        back: 'वापस'
+      }
+    };
+
+    const TRADES = [
+      { id: 'all', en: 'All', hi: 'सभी', icon: '' },
+      { id: 'electrician', en: 'Electrician', hi: 'इलेक्ट्रीशियन', icon: '⚡ ' },
+      { id: 'plumber', en: 'Plumber', hi: 'प्लंबर', icon: '🔧 ' },
+      { id: 'carpenter', en: 'Carpenter', hi: 'कारपेंटर', icon: '🪚 ' },
+      { id: 'appliance', en: 'AC Repair', hi: 'एसी रिपेयर', icon: '❄️ ' },
+      { id: 'painter', en: 'Painter', hi: 'पेंटर', icon: '🎨 ' }
+    ];
+
+    const SLOTS = [
+      '09:00 - 11:00 AM',
+      '11:00 - 01:00 PM',
+      '02:00 - 04:00 PM',
+      '04:00 - 06:00 PM'
+    ];
+
+    const DATES = [
+      { id: 'Today, Nov 21', en: 'Today', hi: 'आज' },
+      { id: 'Sun, Nov 22', en: 'Tomorrow', hi: 'कल' },
+      { id: 'Mon, Nov 23', en: 'Mon, 23 Nov', hi: 'सोम, 23' }
+    ];
+
+    const PINS = [
+      { pin: '560034', areaEn: 'Koramangala, Bengaluru', areaHi: 'कोरमंगला, बेंगलुरु' },
+      { pin: '110001', areaEn: 'Connaught Place, Delhi', areaHi: 'कनॉट प्लेस, दिल्ली' },
+      { pin: '400050', areaEn: 'Bandra West, Mumbai', areaHi: 'बांद्रा वेस्ट, मुंबई' }
+    ];
+
+    function createInitialState() {
+      return {
+        viewport: 'mobile', // 'mobile' | 'dual' | 'tablet' — defaults to calm Single Phone!
+        lang: 'en',
+        workspace: 'customer', // 'customer' | 'worker'
+        custTab: 'explore', // 'explore' | 'bookings'
+        proTab: 'jobs', // 'jobs' | 'khata'
+
+        // Sub-page navigation stack (clean full-view transitions instead of crowded popups)
+        // null | 'worker_detail' | 'login' | 'settings' | 'bug_report' | 'export_khata' | 'pin_select' | 'upi_settle' | 'policy'
+        custSubPage: null,
+        proSubPage: null,
+
+        authMode: 'signin', // 'signin' | 'signup'
+        loginAccountType: 'customer', // 'customer' | 'worker'
+        pendingBookingAfterLogin: false,
+        loginForm: {
+          name: 'Priya Menon',
+          email: 'priya@example.com',
+          phone: '+91 98450 11223',
+          password: '••••••••'
+        },
+        authUser: {
+          signedIn: false, // Customer auth state
+          name: 'Priya Menon',
+          initials: 'PM',
+          email: 'priya@example.com',
+          phone: '+91 98450 11223'
+        },
+        proUser: {
+          signedIn: true, // Professional auth state (Ramesh Kumar)
+          name: 'Ramesh Kumar',
+          initials: 'RK',
+          email: 'ramesh@example.com',
+          phone: '+91 99001 44556'
+        },
+
+        // Top Dismissible Notifications (per surface so Dual Sync shows each side's top alert cleanly)
+        topNotifCustomer: {
+          id: 1,
+          title: 'Appointment Reminder Enabled',
+          body: 'You will get top alerts when a helper confirms your slot.'
+        },
+        topNotifWorker: {
+          id: 2,
+          title: 'New Booking Request',
+          body: 'Arjun Nair requested Today, 11:00 - 01:00 PM in PIN 560034.'
+        },
+
+        notificationsEnabled: true,
+        pin: '560034',
+        selectedTrade: 'all',
+        searchQuery: '',
+        aiHint: null,
+        selectedWorkerId: 'w1',
+
+        bookingDraft: {
+          workerId: 'w1',
+          date: 'Today, Nov 21',
+          slot: '02:00 - 04:00 PM',
+          issueNote: '',
+          address: 'Flat 402, Palm Grove, 4th Block'
+        },
+
+        settleDraft: {
+          bookingId: null,
+          amount: '350',
+          method: 'UPI'
+        },
+
+        workers: [
+          {
+            id: 'w1',
+            nameEn: 'Ramesh Kumar',
+            nameHi: 'रमेश कुमार',
+            initials: 'RK',
+            trade: 'electrician',
+            exp: 8,
+            visitFee: 149,
+            hourlyRate: 250,
+            rating: 4.9,
+            jobsCount: 64,
+            verified: true,
+            isOnline: true,
+            upiId: 'ramesh.elec@okaxis',
+            phone: '+91 99001 44556',
+            langs: 'Hindi, English',
+            skillsEn: ['Switchboard & MCB Repair', 'Ceiling Fan & Regulator', 'Geyser Point & Inverter'],
+            skillsHi: ['स्विचबोर्ड और एमसीबी रिपेयर', 'पंखा और रेगुलेटर', 'गीज़र और इन्वर्टर वायरिंग'],
+            khataToday: 450,
+            khataMonth: 18400,
+            blockedSlots: []
+          },
+          {
+            id: 'w2',
+            nameEn: 'Suresh Yadav',
+            nameHi: 'सुरेश यादव',
+            initials: 'SY',
+            trade: 'plumber',
+            exp: 6,
+            visitFee: 129,
+            hourlyRate: 220,
+            rating: 4.7,
+            jobsCount: 41,
+            verified: true,
+            isOnline: true,
+            upiId: 'suresh.plumb@paytm',
+            phone: '+91 98112 33445',
+            langs: 'Hindi, English',
+            skillsEn: ['Tap & Mixer Leak', 'Flush Tank Repair', 'Kitchen Sink Unclog'],
+            skillsHi: ['नल और मिक्सर लीक', 'फ्लश टैंक रिपेयर', 'किचन सिंक अनब्लॉक'],
+            khataToday: 300,
+            khataMonth: 15200,
+            blockedSlots: []
+          },
+          {
+            id: 'w3',
+            nameEn: 'Salim Ansari',
+            nameHi: 'सलीम अंसारी',
+            initials: 'SA',
+            trade: 'carpenter',
+            exp: 14,
+            visitFee: 149,
+            hourlyRate: 300,
+            rating: 4.8,
+            jobsCount: 92,
+            verified: true,
+            isOnline: true,
+            upiId: 'salim.wood@ybl',
+            phone: '+91 98204 77889',
+            langs: 'Hindi, English',
+            skillsEn: ['Door Lock & Hinge Fix', 'Wardrobe Sliding Track', 'Curtain Rod & Drill'],
+            skillsHi: ['दरवाजा लॉक और कब्जा', 'अलमारी स्लाइडिंग रिपेयर', 'पर्दा रॉड और ड्रिलिंग'],
+            khataToday: 600,
+            khataMonth: 24500,
+            blockedSlots: ['11:00 - 01:00 PM']
+          },
+          {
+            id: 'w4',
+            nameEn: 'Vikram Sharma',
+            nameHi: 'विक्रम शर्मा',
+            initials: 'VS',
+            trade: 'appliance',
+            exp: 9,
+            visitFee: 199,
+            hourlyRate: 350,
+            rating: 4.9,
+            jobsCount: 78,
+            verified: true,
+            isOnline: true,
+            upiId: 'vikram.cool@okicici',
+            phone: '+91 97390 55661',
+            langs: 'Hindi, English',
+            skillsEn: ['Split AC Servicing', 'Washing Machine Repair', 'RO Water Purifier'],
+            skillsHi: ['स्प्लिट एसी सर्विस', 'वाशिंग मशीन रिपेयर', 'आरओ वाटर प्यूरीफायर'],
+            khataToday: 898,
+            khataMonth: 29100,
+            blockedSlots: []
+          },
+          {
+            id: 'w5',
+            nameEn: 'Manoj Verma',
+            nameHi: 'मनोज वर्मा',
+            initials: 'MV',
+            trade: 'painter',
+            exp: 11,
+            visitFee: 99,
+            hourlyRate: 200,
+            rating: 4.6,
+            jobsCount: 29,
+            verified: false,
+            isOnline: true,
+            upiId: 'manoj.paint@ybl',
+            phone: '+91 96501 88990',
+            langs: 'Hindi',
+            skillsEn: ['Dampness & Putty Patch', 'Single Room Repaint', 'Wood Touch-up'],
+            skillsHi: ['सीलन और पुट्टी रिपेयर', 'एक कमरा पेंटिंग', 'लकड़ी पॉलिश'],
+            khataToday: 0,
+            khataMonth: 16800,
+            blockedSlots: []
+          }
+        ],
+
+        bookings: [
+          {
+            id: 'BK-1048',
+            workerId: 'w1',
+            customerName: 'Arjun Nair',
+            customerPhone: '+91 98802 66771',
+            pin: '560034',
+            locality: 'Koramangala 6th Block',
+            fullAddress: 'House #18, 2nd Cross, 6th Block',
+            date: 'Today, Nov 21',
+            slot: '11:00 - 01:00 PM',
+            issueNote: 'Kitchen geyser switch tripping',
+            visitFee: 149,
+            finalAmount: null,
+            paymentMethod: null,
+            status: 'requested',
+            rating: null
+          },
+          {
+            id: 'BK-1041',
+            workerId: 'w3',
+            customerName: 'Priya Menon',
+            customerPhone: '+91 98450 11223',
+            pin: '560034',
+            locality: 'Koramangala 4th Block',
+            fullAddress: 'Flat 402, Palm Grove, 4th Block',
+            date: 'Nov 20',
+            slot: '04:00 - 06:00 PM',
+            issueNote: 'Wardrobe door hinge alignment',
+            visitFee: 149,
+            finalAmount: 350,
+            paymentMethod: 'UPI',
+            status: 'completed',
+            rating: 5
+          }
+        ],
+
+        // Simulated PostgreSQL bug_reports table — UI filters out status === 'resolved'!
+        bugDbTable: [
+          {
+            id: 'BUG-101',
+            userEmail: 'priya@example.com',
+            pageContext: 'Explore',
+            version: '1.1.0',
+            desc: 'Allow saving multiple home/office PIN addresses',
+            status: 'open' // 'open' | 'resolved'
+          },
+          {
+            id: 'BUG-098',
+            userEmail: 'priya@example.com',
+            pageContext: 'Bookings',
+            version: '1.0.0',
+            desc: 'Old bug already fixed in DB (hidden from user list)',
+            status: 'resolved'
+          }
+        ],
+        bugInputDraft: ''
+      };
+    }
+
+    let state = createInitialState();
+
+    function t(key) {
+      return I18N[state.lang][key] || I18N.en[key] || key;
+    }
+
+    function getTradeName(tradeId) {
+      const tr = TRADES.find(x => x.id === tradeId);
+      if (!tr) return tradeId;
+      return state.lang === 'hi' ? tr.hi : tr.en;
+    }
+
+    function pushNotification(target, title, body) {
+      if (!state.notificationsEnabled) return;
+      const payload = { id: Date.now(), title, body };
+      if (target === 'both') {
+        state.topNotifCustomer = payload;
+        state.topNotifWorker = payload;
+      } else if (target === 'worker') {
+        state.topNotifWorker = payload;
+      } else {
+        state.topNotifCustomer = payload;
+      }
+    }
+
+    function dismissNotif(roleSide) {
+      if (roleSide === 'worker') state.topNotifWorker = null;
+      else state.topNotifCustomer = null;
+      renderAll();
+    }
+
+    // --- Lightweight Hybrid AI Search ---
+    function handleSearch(val) {
+      state.searchQuery = val;
+      const q = val.trim().toLowerCase();
+      if (!q) {
+        state.aiHint = null;
+        state.selectedTrade = 'all';
+        renderAll();
+        return;
+      }
+      let matched = null;
+      if (/(bijli|switch|spark|mcb|fan|light|inverter|wiring|electric|बिजली|स्विच|पंखा)/.test(q)) matched = 'electrician';
+      else if (/(tap|nal|leak|paani|flush|pipe|sink|plumb|नल|पानी|लीक)/.test(q)) matched = 'plumber';
+      else if (/(door|lock|hinge|almari|wood|bed|curtain|carpent|दरवाजा|अलमारी)/.test(q)) matched = 'carpenter';
+      else if (/(ac|cooling|fridge|washing|ro|geyser|एसी)/.test(q)) matched = 'appliance';
+      else if (/(paint|damp|putty|पेंट|सीलन)/.test(q)) matched = 'painter';
+
+      if (matched) {
+        state.selectedTrade = matched;
+        state.bookingDraft.issueNote = val.trim();
+        state.aiHint = getTradeName(matched);
+      } else {
+        state.aiHint = null;
+      }
+      renderAll();
+    }
+
+    // --- Navigation Helpers ---
+    function getSubPage(roleSide) {
+      return roleSide === 'worker' ? state.proSubPage : state.custSubPage;
+    }
+
+    function setSubPage(roleSide, page) {
+      if (roleSide === 'worker') state.proSubPage = page;
+      else state.custSubPage = page;
+      renderAll();
+    }
+
+    function openWorkerDetail(workerId) {
+      state.selectedWorkerId = workerId;
+      state.bookingDraft.workerId = workerId;
+      if (state.viewport === 'tablet' && state.workspace === 'customer') {
+        state.custSubPage = null;
+      } else {
+        state.custSubPage = 'worker_detail';
+      }
+      renderAll();
+    }
+
+    function selectLoginAccountType(accType) {
+      state.loginAccountType = accType;
+      if (accType === 'worker') {
+        state.loginForm.name = 'Ramesh Kumar';
+        state.loginForm.email = 'ramesh@example.com';
+        state.loginForm.phone = '+91 99001 44556';
+      } else {
+        state.loginForm.name = 'Priya Menon';
+        state.loginForm.email = 'priya@example.com';
+        state.loginForm.phone = '+91 98450 11223';
+      }
+      renderAll();
+    }
+
+    function attemptConfirmBooking() {
+      if (!state.authUser.signedIn) {
+        state.loginAccountType = 'customer';
+        state.loginForm.name = 'Priya Menon';
+        state.loginForm.email = 'priya@example.com';
+        state.pendingBookingAfterLogin = true;
+        state.custSubPage = 'login';
+        renderAll();
+        return;
+      }
+      createBookingRecord();
+    }
+
+    function handleLoginSubmit(provider) {
+      const isPro = state.loginAccountType === 'worker';
+      const fallbackName = isPro ? 'Ramesh Kumar' : 'Priya Menon';
+      const fallbackEmail = isPro ? 'ramesh@example.com' : 'priya@example.com';
+      const name = (state.loginForm.name || fallbackName).trim();
+      const email = (state.loginForm.email || fallbackEmail).trim();
+      const initials = name.split(/\s+/).map(s => s[0]).join('').slice(0, 2).toUpperCase() || 'U';
+
+      if (isPro) {
+        state.proUser = {
+          signedIn: true,
+          name,
+          initials,
+          email,
+          phone: state.loginForm.phone || '+91 99001 44556'
+        };
+        state.pendingBookingAfterLogin = false;
+        state.workspace = 'worker';
+        state.custSubPage = null;
+        state.proSubPage = null;
+        pushNotification('worker', 'Signed In as Professional', `Welcome back, ${name}.`);
+        renderAll();
+        return;
+      }
+
+      state.authUser = {
+        signedIn: true,
+        name,
+        initials,
+        email,
+        phone: state.loginForm.phone || '+91 98450 11223'
+      };
+      state.workspace = 'customer';
+
+      if (state.pendingBookingAfterLogin) {
+        state.pendingBookingAfterLogin = false;
+        createBookingRecord();
+      } else {
+        state.custSubPage = null;
+        state.proSubPage = null;
+        pushNotification('customer', 'Signed In', `Welcome back, ${name}.`);
+        renderAll();
+      }
+    }
+
+    function handleSignOut(roleSide) {
+      if (roleSide === 'worker') {
+        state.proUser.signedIn = false;
+        state.loginAccountType = 'worker';
+        state.loginForm.name = 'Ramesh Kumar';
+        state.loginForm.email = 'ramesh@example.com';
+        state.proSubPage = 'login';
+      } else {
+        state.authUser.signedIn = false;
+        state.custSubPage = null;
+      }
+      pushNotification(roleSide, 'Signed Out', 'Session cleared safely.');
+      renderAll();
+    }
+
+    function createBookingRecord() {
+      const w = state.workers.find(x => x.id === state.bookingDraft.workerId) || state.workers[0];
+      const newId = 'BK-' + (1050 + state.bookings.length);
+      const pinInfo = PINS.find(p => p.pin === state.pin) || { pin: state.pin, areaEn: 'PIN ' + state.pin };
+      state.bookings.unshift({
+        id: newId,
+        workerId: w.id,
+        customerName: state.authUser.name,
+        customerPhone: state.authUser.phone,
+        pin: state.pin,
+        locality: pinInfo.areaEn,
+        fullAddress: state.bookingDraft.address || 'Flat 402, Palm Grove',
+        date: state.bookingDraft.date,
+        slot: state.bookingDraft.slot,
+        issueNote: state.bookingDraft.issueNote || 'Inspection & repair',
+        visitFee: w.visitFee,
+        finalAmount: null,
+        paymentMethod: null,
+        status: 'requested',
+        rating: null
+      });
+      state.custSubPage = null;
+      state.custTab = 'bookings';
+      state.proTab = 'jobs';
+      pushNotification('customer', 'Booking Requested', `${w.nameEn} · ${state.bookingDraft.date}, ${state.bookingDraft.slot}`);
+      pushNotification('worker', 'New Booking Request', `${state.authUser.name} requested ${state.bookingDraft.slot}`);
+      renderAll();
+    }
+
+    function handleWorkerJobAction(bookingId, action) {
+      const b = state.bookings.find(x => x.id === bookingId);
+      if (!b) return;
+      const w = state.workers.find(x => x.id === b.workerId) || state.workers[0];
+
+      if (action === 'accept') {
+        b.status = 'confirmed';
+        pushNotification('customer', 'Booking Confirmed!', `${w.nameEn} accepted ${b.slot}. 60-min reminder scheduled.`);
+        pushNotification('worker', 'Slot Confirmed', `Address unlocked: ${b.fullAddress}`);
+      } else if (action === 'decline') {
+        b.status = 'declined';
+        pushNotification('customer', 'Slot Unavailable', `${w.nameEn} could not take ${b.slot}. Please pick another helper.`);
+      } else if (action === 'start') {
+        b.status = 'in_progress';
+        pushNotification('customer', 'Work Started', `${w.nameEn} has started the job.`);
+      } else if (action === 'settle') {
+        state.settleDraft = {
+          bookingId: b.id,
+          amount: String(Math.max(b.visitFee, 350)),
+          method: 'UPI'
+        };
+        state.proSubPage = 'upi_settle';
+      }
+      renderAll();
+    }
+
+    function completeSettlement() {
+      const b = state.bookings.find(x => x.id === state.settleDraft.bookingId);
+      const amt = parseInt(state.settleDraft.amount, 10) || 149;
+      if (b) {
+        b.status = 'completed';
+        b.finalAmount = amt;
+        b.paymentMethod = state.settleDraft.method;
+        const w = state.workers.find(x => x.id === b.workerId);
+        if (w) {
+          w.khataToday += amt;
+          w.khataMonth += amt;
+          w.jobsCount += 1;
+        }
+        pushNotification('worker', 'Payment Logged to Khata', `₹${amt} received via ${b.paymentMethod} (0% commission).`);
+        pushNotification('customer', 'Job Completed', `Paid ₹${amt} via ${b.paymentMethod}. Please rate your helper!`);
+      }
+      state.proSubPage = null;
+      renderAll();
+    }
+
+    function submitBugToDb(roleSide) {
+      const desc = (state.bugInputDraft || '').trim();
+      if (!desc) return;
+      const acct = roleSide === 'worker' ? state.proUser : state.authUser;
+      const newBug = {
+        id: 'BUG-' + (102 + state.bugDbTable.length),
+        userEmail: acct.email,
+        pageContext: roleSide === 'worker' ? state.proTab : state.custTab,
+        version: '1.1.0',
+        desc,
+        status: 'open'
+      };
+      state.bugDbTable.unshift(newBug);
+      state.bugInputDraft = '';
+      pushNotification(roleSide, 'Bug Logged to Database', `${newBug.id} saved. It will disappear once resolved.`);
+      renderAll();
+    }
+
+    function markBugFixedInDb(bugId, roleSide) {
+      const bug = state.bugDbTable.find(x => x.id === bugId);
+      if (bug) {
+        bug.status = 'resolved';
+        pushNotification(roleSide, 'Bug Resolved in DB', `${bugId} marked fixed and removed from your open list.`);
+        renderAll();
+      }
+    }
+
+    function toggleLanguage() {
+      state.lang = state.lang === 'en' ? 'hi' : 'en';
+      renderAll();
+    }
+
+    function resetDemo() {
+      const vp = state.viewport;
+      state = createInitialState();
+      state.viewport = vp;
+      renderAll();
+    }
+
+    // --- Deterministic Inline SVG QR ---
+    function renderQrSvg(seed) {
+      let h = 2166136261;
+      for (let i = 0; i < seed.length; i++) {
+        h ^= seed.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      const n = 21, c = 6;
+      let rects = '';
+      const finder = (r, col, r0, c0) => {
+        const lr = r - r0, lc = col - c0;
+        return lr === 0 || lr === 6 || lc === 0 || lc === 6 || (lr >= 2 && lr <= 4 && lc >= 2 && lc <= 4);
+      };
+      for (let r = 0; r < n; r++) {
+        for (let col = 0; col < n; col++) {
+          let on = false;
+          if (r < 7 && col < 7) on = finder(r, col, 0, 0);
+          else if (r < 7 && col >= n - 7) on = finder(r, col, 0, n - 7);
+          else if (r >= n - 7 && col < 7) on = finder(r, col, n - 7, 0);
+          else {
+            h ^= (r * 31 + col * 17);
+            h = Math.imul(h, 16777619);
+            on = (Math.abs(h) % 10) < 5;
+          }
+          if (on) rects += `<rect x="${(col + 2) * c}" y="${(r + 2) * c}" width="${c}" height="${c}" fill="currentColor" />`;
+        }
+      }
+      const s = (n + 4) * c;
+      return `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" class="mx-auto rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] p-2">${rects}</svg>`;
+    }
+
+    // --- Clean User Icon SVG (Role-Scoped) ---
+    function renderUserAvatarButton(roleSide) {
+      const acct = roleSide === 'worker' ? state.proUser : state.authUser;
+      if (acct.signedIn) {
+        return `
+          <button onclick="setSubPage('${roleSide}', 'settings')" class="w-9 h-9 rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-bold flex items-center justify-center shadow-sm hover:opacity-90 transition" title="Account & Settings">
+            ${acct.initials}
+          </button>
+        `;
+      }
+      return `
+        <button onclick="setSubPage('${roleSide}', 'settings')" class="w-9 h-9 rounded-full bg-[var(--content)] text-[var(--foreground)] border border-[var(--border)] flex items-center justify-center hover:bg-[var(--secondary)] transition" title="Account & Settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+        </button>
+      `;
+    }
+
+    // --- Top Dismissible Notification Banner ---
+    function renderTopNotification(roleSide) {
+      const notif = roleSide === 'worker' ? state.topNotifWorker : state.topNotifCustomer;
+      if (!notif || !state.notificationsEnabled) return '';
+      return `
+        <div class="absolute top-3 left-3 right-3 z-40 bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-2xl px-3.5 py-2.5 shadow-lg flex items-start justify-between gap-2.5">
+          <div class="flex items-start gap-2.5 min-w-0 flex-1">
+            <span class="w-6 h-6 rounded-full bg-[var(--secondary)] text-[var(--secondary-foreground)] flex items-center justify-center text-xs shrink-0 mt-0.5">🔔</span>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-semibold text-[var(--foreground)] truncate">${notif.title}</div>
+              <div class="text-xs text-[var(--muted-foreground)] leading-snug mt-0.5">${notif.body}</div>
+            </div>
+          </div>
+          <button onclick="dismissNotif('${roleSide}')" class="w-6 h-6 rounded-full hover:bg-[var(--content)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-xs flex items-center justify-center shrink-0" title="Dismiss notification">
+            ✕
+          </button>
+        </div>
+      `;
+    }
+
+    // --- Sub-Pages (Login, Settings, Bug Report, Khata Export, Worker Detail, Settlement) ---
+    function renderSubPageContent(roleSide, page) {
+      if (page === 'login') {
+        const w = state.workers.find(x => x.id === state.bookingDraft.workerId) || state.workers[0];
+        const isSignup = state.authMode === 'signup';
+        const canGoBack = !(roleSide === 'worker' && !state.proUser.signedIn);
+        return `
+          <div class="flex flex-col h-full bg-[var(--background)]">
+            <div class="px-4 py-3 border-b border-[var(--border)] bg-[var(--card)] flex items-center gap-3 min-h-[45px]">
+              ${canGoBack ? `<button onclick="state.pendingBookingAfterLogin=false;setSubPage('${roleSide}', null)" class="text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]">← ${t('back')}</button>` : `<span class="text-xs font-semibold text-[var(--foreground)]">${t('appName')}</span>`}
+            </div>
+            <div class="p-6 space-y-5 flex-1 overflow-y-auto">
+              <div class="space-y-1.5">
+                <div class="w-10 h-10 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-sm flex items-center justify-center mb-3">DH</div>
+                <h2 class="text-lg font-bold text-[var(--foreground)]">${isSignup ? t('signUpTitle') : t('signInTitle')}</h2>
+                <p class="text-xs text-[var(--muted-foreground)]">
+                  ${state.pendingBookingAfterLogin
+                    ? `Sign in to confirm your ${state.bookingDraft.slot} booking with ${w.nameEn}.`
+                    : state.loginAccountType === 'worker'
+                      ? 'Sign in to manage your job requests, rates, and Khata.'
+                      : 'Sign in to book appointments and manage your bookings.'}
+                </p>
+              </div>
+
+              ${!state.pendingBookingAfterLogin ? `
+                <div class="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[var(--content)] border border-[var(--border)]">
+                  <button onclick="selectLoginAccountType('customer')" class="py-2 rounded-lg text-xs font-semibold transition ${state.loginAccountType === 'customer' ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm' : 'text-[var(--muted-foreground)]'}">
+                    Customer
+                  </button>
+                  <button onclick="selectLoginAccountType('worker')" class="py-2 rounded-lg text-xs font-semibold transition ${state.loginAccountType === 'worker' ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm' : 'text-[var(--muted-foreground)]'}">
+                    Professional
+                  </button>
+                </div>
+              ` : ''}
+
+              <div class="space-y-3">
+                ${isSignup ? `
+                  <div>
+                    <label class="block text-xs font-medium text-[var(--muted-foreground)] mb-1">Full Name</label>
+                    <input type="text" data-focus-key="login-name" value="${state.loginForm.name}" oninput="state.loginForm.name=this.value" class="w-full px-3.5 py-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-sm text-[var(--foreground)] focus:outline-none" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-[var(--muted-foreground)] mb-1">Phone Number</label>
+                    <input type="text" data-focus-key="login-phone" value="${state.loginForm.phone}" oninput="state.loginForm.phone=this.value" class="w-full px-3.5 py-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-sm text-[var(--foreground)] focus:outline-none" />
+                  </div>
+                ` : ''}
+                <div>
+                  <label class="block text-xs font-medium text-[var(--muted-foreground)] mb-1">Email Address</label>
+                  <input type="email" data-focus-key="login-email" value="${state.loginForm.email}" oninput="state.loginForm.email=this.value" class="w-full px-3.5 py-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-sm text-[var(--foreground)] focus:outline-none" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-[var(--muted-foreground)] mb-1">Password</label>
+                  <input type="password" data-focus-key="login-pass" value="${state.loginForm.password}" oninput="state.loginForm.password=this.value" class="w-full px-3.5 py-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-sm text-[var(--foreground)] focus:outline-none" />
+                </div>
+
+                <button onclick="handleLoginSubmit('email')" class="w-full py-3 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-semibold shadow-sm hover:opacity-95 transition">
+                  ${isSignup ? t('createAccBtn') : t('signInBtn')}
+                </button>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <div class="h-px bg-[var(--border)] flex-1"></div>
+                <span class="text-xs text-[var(--muted-foreground)]">or</span>
+                <div class="h-px bg-[var(--border)] flex-1"></div>
+              </div>
+
+              <button onclick="handleLoginSubmit('google')" class="w-full py-2.5 px-4 rounded-xl bg-[var(--card)] border border-[var(--border)] text-sm font-medium text-[var(--foreground)] flex items-center justify-center gap-2 hover:bg-[var(--content)] transition">
+                <span class="font-bold">G</span>
+                <span>${t('googleBtn')}</span>
+              </button>
+
+              <div class="text-center pt-1">
+                <button onclick="state.authMode=state.authMode==='signin'?'signup':'signin';renderAll()" class="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] underline">
+                  ${isSignup ? 'Already have an account? Sign In' : 'New to DailyHelper? Create an account'}
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (page === 'settings') {
+        const acct = roleSide === 'worker' ? state.proUser : state.authUser;
+        const openBugCount = state.bugDbTable.filter(b => b.userEmail === acct.email && b.status !== 'resolved').length;
+        return `
+          <div class="flex flex-col h-full bg-[var(--background)]">
+            <div class="px-4 py-3.5 border-b border-[var(--border)] bg-[var(--card)] flex items-center justify-between">
+              <button onclick="setSubPage('${roleSide}', null)" class="text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]">← ${t('back')}</button>
+              <span class="text-sm font-semibold text-[var(--foreground)]">${t('settingsTitle')}</span>
+              <span class="w-8"></span>
+            </div>
+
+            <div class="p-4 space-y-5 flex-1 overflow-y-auto">
+              <!-- Account Card -->
+              <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4">
+                ${acct.signedIn ? `
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <div class="w-10 h-10 rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-xs flex items-center justify-center shrink-0">${acct.initials}</div>
+                      <div class="min-w-0">
+                        <div class="text-sm font-semibold text-[var(--foreground)] truncate">${acct.name}</div>
+                        <div class="text-xs text-[var(--muted-foreground)] truncate">${acct.email}</div>
+                      </div>
+                    </div>
+                    <button onclick="handleSignOut('${roleSide}')" class="px-3 py-1.5 rounded-xl border border-[var(--border)] text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] shrink-0">
+                      ${t('signOutBtn')}
+                    </button>
+                  </div>
+                ` : `
+                  <div class="flex items-center justify-between gap-3">
+                    <div>
+                      <div class="text-sm font-semibold text-[var(--foreground)]">Not signed in</div>
+                      <div class="text-xs text-[var(--muted-foreground)]">Sign in as Customer or Professional</div>
+                    </div>
+                    <button onclick="selectLoginAccountType('${roleSide}');setSubPage('${roleSide}', 'login')" class="px-3.5 py-2 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shrink-0">
+                      ${t('signInBtn')}
+                    </button>
+                  </div>
+                `}
+              </div>
+
+              <!-- Preferences -->
+              <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl divide-y divide-[var(--border)]">
+                <div class="p-3.5 flex items-center justify-between gap-3">
+                  <span class="text-xs font-medium text-[var(--foreground)]">${t('notificationsLabel')}</span>
+                  <div class="flex items-center gap-2">
+                    <button onclick="pushNotification('${roleSide}', 'Appointment Reminder', '${roleSide === 'worker' ? 'Upcoming job at 02:00 PM in PIN ' + state.pin : 'Ramesh Kumar arrives in 60 minutes (02:00 PM).'}');setSubPage('${roleSide}', null);renderAll()" class="text-xs text-[var(--muted-foreground)] underline">Test</button>
+                    <button onclick="state.notificationsEnabled=!state.notificationsEnabled;renderAll()" class="px-2.5 py-1 rounded-lg border border-[var(--border)] text-xs font-semibold ${state.notificationsEnabled ? 'bg-[var(--primary)] text-[var(--primary-foreground)]' : 'bg-[var(--content)] text-[var(--muted-foreground)]'}">
+                      ${state.notificationsEnabled ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </div>
+
+                <button onclick="toggleLanguage()" class="w-full p-3.5 flex items-center justify-between text-left hover:bg-[var(--content)] transition">
+                  <span class="text-xs font-medium text-[var(--foreground)]">${t('languageLabel')}</span>
+                  <span class="text-xs text-[var(--muted-foreground)] font-semibold">${state.lang === 'en' ? 'English' : 'हिंदी'}</span>
+                </button>
+              </div>
+
+              <!-- Role-Scoped Secondary Options: Export Khata ONLY for Professionals! -->
+              <div class="space-y-1.5">
+                <div class="px-1 text-xs font-medium text-[var(--muted-foreground)]">${t('moreOptions')}</div>
+                <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl divide-y divide-[var(--border)]">
+                  ${roleSide === 'worker' ? `
+                    <button onclick="setSubPage('${roleSide}', 'export_khata')" class="w-full p-3.5 flex items-center justify-between text-left hover:bg-[var(--content)] transition">
+                      <span class="text-xs font-medium text-[var(--foreground)]">${t('exportKhata')}</span>
+                      <span class="text-xs text-[var(--muted-foreground)]">→</span>
+                    </button>
+                  ` : ''}
+
+                  <button onclick="setSubPage('${roleSide}', 'bug_report')" class="w-full p-3.5 flex items-center justify-between text-left hover:bg-[var(--content)] transition">
+                    <span class="text-xs font-medium text-[var(--foreground)]">${t('reportBug')}</span>
+                    <span class="text-xs text-[var(--muted-foreground)]">${openBugCount > 0 ? `${openBugCount} open →` : '→'}</span>
+                  </button>
+
+                  <button onclick="setSubPage('${roleSide}', 'policy')" class="w-full p-3.5 flex items-center justify-between text-left hover:bg-[var(--content)] transition">
+                    <span class="text-xs font-medium text-[var(--foreground)]">${t('safetyGuide')}</span>
+                    <span class="text-xs text-[var(--muted-foreground)]">→</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (page === 'bug_report') {
+        const acct = roleSide === 'worker' ? state.proUser : state.authUser;
+        const openBugs = state.bugDbTable.filter(
+          b => b.userEmail === acct.email && b.status !== 'resolved'
+        );
+        return `
+          <div class="flex flex-col h-full bg-[var(--background)]">
+            <div class="px-4 py-3.5 border-b border-[var(--border)] bg-[var(--card)] flex items-center justify-between">
+              <button onclick="setSubPage('${roleSide}', 'settings')" class="text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]">← ${t('back')}</button>
+              <span class="text-sm font-semibold text-[var(--foreground)]">${t('reportBug')}</span>
+              <span class="w-8"></span>
+            </div>
+
+            <div class="p-4 space-y-5 flex-1 overflow-y-auto">
+              <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
+                <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                  Reports are saved directly to our database so we can fix them quickly. Once an issue is fixed, it is automatically cleared from your list.
+                </p>
+                <textarea
+                  rows="3"
+                  data-focus-key="bug-input-${roleSide}"
+                  oninput="state.bugInputDraft=this.value"
+                  placeholder="What went wrong or could be better?"
+                  class="w-full p-3 rounded-xl bg-[var(--content)] border border-[var(--border)] text-xs text-[var(--foreground)] focus:outline-none"
+                >${state.bugInputDraft}</textarea>
+                <button onclick="submitBugToDb('${roleSide}')" class="w-full py-2.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold">
+                  Submit Bug Report
+                </button>
+              </div>
+
+              <div class="space-y-2">
+                <div class="px-1 text-xs font-semibold text-[var(--muted-foreground)]">
+                  Your Open Reports (${openBugs.length})
+                </div>
+                ${openBugs.length === 0 ? `
+                  <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 text-xs text-[var(--muted-foreground)] text-center">
+                    No open bugs! Fixed issues are automatically hidden.
+                  </div>
+                ` : openBugs.map(b => `
+                  <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-3.5 space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="text-xs font-semibold text-[var(--foreground)]">${b.id} · ${b.pageContext}</span>
+                      <span class="px-2 py-0.5 rounded-md bg-[var(--secondary)] text-[var(--secondary-foreground)] text-xs">Open in DB</span>
+                    </div>
+                    <p class="text-xs text-[var(--muted-foreground)]">${b.desc}</p>
+                    <div class="pt-1 border-t border-[var(--border)] flex justify-end">
+                      <button onclick="markBugFixedInDb('${b.id}', '${roleSide}')" class="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] underline">
+                        Simulate DB Fix (Resolve &amp; Hide)
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (page === 'export_khata') {
+        const completedRows = state.bookings.filter(b => b.status === 'completed');
+        const csv = [
+          'BookingID,Date,Customer,AmountINR,Payment',
+          ...completedRows.map(b => `${b.id},"${b.date}","${b.customerName}",${b.finalAmount || b.visitFee},${b.paymentMethod || 'Cash'}`)
+        ].join('\n');
+        return `
+          <div class="flex flex-col h-full bg-[var(--background)]">
+            <div class="px-4 py-3.5 border-b border-[var(--border)] bg-[var(--card)] flex items-center justify-between">
+              <button onclick="setSubPage('${roleSide}', 'settings')" class="text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]">← ${t('back')}</button>
+              <span class="text-sm font-semibold text-[var(--foreground)]">${t('exportKhata')}</span>
+              <span class="w-8"></span>
+            </div>
+            <div class="p-4 space-y-4 flex-1 overflow-y-auto">
+              <p class="text-xs text-[var(--muted-foreground)]">Export your completed jobs and direct Cash/UPI earnings ledger as a portable CSV file.</p>
+              <pre class="p-3 rounded-2xl bg-[var(--card)] border border-[var(--border)] text-xs overflow-x-auto">${csv}</pre>
+              <button onclick="pushNotification('${roleSide}', 'Khata Exported', 'Saved daily_helper_khata.csv to device.');setSubPage('${roleSide}', 'settings')" class="w-full py-2.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold">
+                Download .CSV
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      if (page === 'policy') {
+        return `
+          <div class="flex flex-col h-full bg-[var(--background)]">
+            <div class="px-4 py-3.5 border-b border-[var(--border)] bg-[var(--card)] flex items-center justify-between">
+              <button onclick="setSubPage('${roleSide}', 'settings')" class="text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]">← ${t('back')}</button>
+              <span class="text-sm font-semibold text-[var(--foreground)]">${t('safetyGuide')}</span>
+              <span class="w-8"></span>
+            </div>
+            <div class="p-4 space-y-3 flex-1 overflow-y-auto">
+              <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-2.5 text-xs text-[var(--foreground)] leading-relaxed">
+                <div><strong>1. Fair Visit Fee:</strong> If you choose not to proceed after inspection, only the stated Visit Fee applies.</div>
+                <div><strong>2. Agree Before Work:</strong> Final repair &amp; material cost is agreed directly with the professional before starting work.</div>
+                <div><strong>3. 100% Direct Payment:</strong> Pay Cash or scan the helper's personal UPI QR on completion — 0% platform commission.</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (page === 'pin_select') {
+        return `
+          <div class="flex flex-col h-full bg-[var(--background)]">
+            <div class="px-4 py-3.5 border-b border-[var(--border)] bg-[var(--card)] flex items-center justify-between">
+              <button onclick="setSubPage('${roleSide}', null)" class="text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]">← ${t('back')}</button>
+              <span class="text-sm font-semibold text-[var(--foreground)]">Select PIN Code</span>
+              <span class="w-8"></span>
+            </div>
+            <div class="p-4 space-y-3 flex-1 overflow-y-auto">
+              ${PINS.map(p => `
+                <button onclick="state.pin='${p.pin}';setSubPage('${roleSide}', null)" class="w-full p-3.5 rounded-2xl border text-left flex items-center justify-between text-xs ${state.pin === p.pin ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)] font-semibold' : 'bg-[var(--card)] border-[var(--border)]'}">
+                  <span>📍 ${p.pin}</span>
+                  <span>${state.lang === 'hi' ? p.areaHi : p.areaEn}</span>
+                </button>
+              `).join('')}
+              <div class="flex gap-2 pt-2">
+                <input id="pinCustomField" type="text" maxlength="6" placeholder="Enter 6-digit PIN..." class="flex-1 px-3 py-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs focus:outline-none" />
+                <button onclick="const v=document.getElementById('pinCustomField').value.trim();if(/^\\d{6}$/.test(v)){state.pin=v;setSubPage('${roleSide}', null);}" class="px-4 py-2.5 rounded-xl bg-[var(--secondary)] text-[var(--secondary-foreground)] border border-[var(--border)] text-xs font-semibold">Apply</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (page === 'upi_settle') {
+        const w = state.workers[0];
+        return `
+          <div class="flex flex-col h-full bg-[var(--background)]">
+            <div class="px-4 py-3.5 border-b border-[var(--border)] bg-[var(--card)] flex items-center justify-between">
+              <button onclick="setSubPage('worker', null)" class="text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]">← ${t('back')}</button>
+              <span class="text-sm font-semibold text-[var(--foreground)]">Collect Payment</span>
+              <span class="w-8"></span>
+            </div>
+            <div class="p-5 space-y-4 flex-1 overflow-y-auto">
+              <div>
+                <label class="block text-xs font-medium text-[var(--muted-foreground)] mb-1">Final Agreed Amount (₹)</label>
+                <input type="text" inputmode="numeric" data-focus-key="settle-amt" value="${state.settleDraft.amount}" oninput="state.settleDraft.amount=this.value.replace(/[^0-9]/g,'');renderAll()" class="w-full px-3.5 py-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-base font-bold text-[var(--foreground)] focus:outline-none" />
+              </div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <button onclick="state.settleDraft.method='UPI';renderAll()" class="py-2 rounded-xl text-xs font-semibold border ${state.settleDraft.method === 'UPI' ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)]' : 'bg-[var(--card)] border-[var(--border)]'}">UPI QR</button>
+                <button onclick="state.settleDraft.method='Cash';renderAll()" class="py-2 rounded-xl text-xs font-semibold border ${state.settleDraft.method === 'Cash' ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)]' : 'bg-[var(--card)] border-[var(--border)]'}">Cash</button>
+              </div>
+
+              ${state.settleDraft.method === 'UPI' ? `
+                <div class="text-center space-y-1.5 py-2">
+                  ${renderQrSvg(w.upiId + state.settleDraft.amount)}
+                  <div class="text-xs font-medium text-[var(--foreground)]">${w.upiId}</div>
+                  <div class="text-xs text-[var(--muted-foreground)]">Direct to your bank · 0% fee</div>
+                </div>
+              ` : `
+                <div class="p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)] text-xs text-center text-[var(--muted-foreground)]">
+                  Collect ₹${state.settleDraft.amount || 0} in cash directly from the customer.
+                </div>
+              `}
+
+              <button onclick="completeSettlement()" class="w-full py-3 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-semibold">
+                Payment Received · Complete Job
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      if (page === 'worker_detail') {
+        return `
+          <div class="flex flex-col h-full bg-[var(--background)]">
+            <div class="px-4 py-3.5 border-b border-[var(--border)] bg-[var(--card)] flex items-center justify-between">
+              <button onclick="setSubPage('customer', null)" class="text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]">← ${t('back')}</button>
+              <span class="text-sm font-semibold text-[var(--foreground)]">Book Appointment</span>
+              <span class="w-8"></span>
+            </div>
+            <div class="flex-1 overflow-y-auto">
+              ${renderWorkerDetailPane(state.selectedWorkerId)}
+            </div>
+          </div>
+        `;
+      }
+
+      return '';
+    }
+
+    // --- Worker Profile & Slot Selection Pane ---
+    function renderWorkerDetailPane(workerId) {
+      const w = state.workers.find(x => x.id === workerId) || state.workers[0];
+      const skills = state.lang === 'hi' ? w.skillsHi : w.skillsEn;
+      return `
+        <div class="p-4 space-y-4">
+          <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 rounded-full bg-[var(--secondary)] text-[var(--secondary-foreground)] font-bold text-sm flex items-center justify-center shrink-0">${w.initials}</div>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center justify-between gap-2">
+                  <h3 class="text-base font-bold text-[var(--foreground)] truncate">${state.lang === 'hi' ? w.nameHi : w.nameEn} ${w.verified ? '✓' : ''}</h3>
+                  <span class="text-xs font-semibold">★ ${w.rating}</span>
+                </div>
+                <p class="text-xs text-[var(--muted-foreground)]">${getTradeName(w.trade)} · ${w.exp} yrs exp · ${w.langs}</p>
+              </div>
+            </div>
+
+            <div class="pt-2 border-t border-[var(--border)] flex items-center justify-between text-xs">
+              <span class="text-[var(--muted-foreground)]">${t('visitFee')}: <strong class="text-[var(--foreground)]">₹${w.visitFee}</strong></span>
+              <span class="text-[var(--muted-foreground)]">${t('hourlyRate')}: <strong class="text-[var(--foreground)]">₹${w.hourlyRate}/hr</strong></span>
+            </div>
+
+            <div class="flex flex-wrap gap-1.5">
+              ${skills.map(s => `<span class="px-2.5 py-1 rounded-lg bg-[var(--content)] text-xs text-[var(--muted-foreground)]">${s}</span>`).join('')}
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <label class="block text-xs font-semibold text-[var(--foreground)]">Select Date</label>
+            <div class="grid grid-cols-3 gap-2">
+              ${DATES.map(d => {
+                const active = state.bookingDraft.date === d.id;
+                return `<button onclick="state.bookingDraft.date='${d.id}';renderAll()" class="py-2 px-2 rounded-xl text-xs font-medium border transition ${active ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)]' : 'bg-[var(--card)] border-[var(--border)]'}">${state.lang === 'hi' ? d.hi : d.en}</button>`;
+              }).join('')}
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <label class="block text-xs font-semibold text-[var(--foreground)]">Select Time Slot</label>
+            <div class="grid grid-cols-2 gap-2">
+              ${SLOTS.map(s => {
+                const blocked = w.blockedSlots.includes(s);
+                const active = state.bookingDraft.slot === s && !blocked;
+                return `<button ${blocked ? 'disabled' : `onclick="state.bookingDraft.slot='${s}';renderAll()"`} class="py-2 px-2.5 rounded-xl text-xs border transition truncate ${blocked ? 'opacity-40 line-through bg-[var(--content)] border-[var(--border)]' : active ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold border-[var(--primary)]' : 'bg-[var(--card)] border-[var(--border)]'}">${s}</button>`;
+              }).join('')}
+            </div>
+          </div>
+
+          <div class="space-y-2.5">
+            <input type="text" data-focus-key="draft-note" value="${(state.bookingDraft.issueNote || '').replace(/"/g, '&quot;')}" oninput="state.bookingDraft.issueNote=this.value" placeholder="Short note (e.g., bedroom fan regulator)" class="w-full px-3.5 py-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs text-[var(--foreground)] focus:outline-none" />
+            <input type="text" data-focus-key="draft-addr" value="${(state.bookingDraft.address || '').replace(/"/g, '&quot;')}" oninput="state.bookingDraft.address=this.value" placeholder="House / Flat &amp; Landmark" class="w-full px-3.5 py-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs text-[var(--foreground)] focus:outline-none" />
+          </div>
+
+          <button onclick="state.bookingDraft.workerId='${w.id}';attemptConfirmBooking()" class="w-full py-3 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-semibold shadow-sm hover:opacity-95 transition">
+            ${t('confirmBooking')} · ₹${w.visitFee} ${t('visitLabel')}
+          </button>
+        </div>
+      `;
+    }
+
+    // --- Calm Customer Main Screens ---
+    function renderCustomerBody(isSplit = false) {
+      if (state.custTab === 'bookings') {
+        return `
+          <div class="p-4 space-y-3">
+            ${state.bookings.map(b => {
+              const w = state.workers.find(x => x.id === b.workerId) || state.workers[0];
+              const statusMap = {
+                requested: 'Requested',
+                confirmed: 'Confirmed',
+                in_progress: 'In Progress',
+                completed: 'Completed',
+                declined: 'Declined'
+              };
+              return `
+                <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-2.5">
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="text-sm font-semibold text-[var(--foreground)] truncate">${state.lang === 'hi' ? w.nameHi : w.nameEn}</div>
+                      <div class="text-xs text-[var(--muted-foreground)]">${getTradeName(w.trade)} · ${b.date}, ${b.slot}</div>
+                    </div>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-medium ${b.status === 'confirmed' || b.status === 'in_progress' ? 'bg-[var(--primary)] text-[var(--primary-foreground)]' : 'bg-[var(--secondary)] text-[var(--secondary-foreground)]'}">${statusMap[b.status] || b.status}</span>
+                  </div>
+
+                  <div class="text-xs text-[var(--muted-foreground)]">${b.issueNote}</div>
+
+                  <div class="pt-2 border-t border-[var(--border)] flex items-center justify-between gap-2">
+                    <span class="text-xs font-medium text-[var(--foreground)]">
+                      ${b.finalAmount ? `Paid ₹${b.finalAmount} (${b.paymentMethod})` : `₹${b.visitFee} ${t('visitLabel')}`}
+                    </span>
+                    ${(b.status === 'confirmed' || b.status === 'in_progress') ? `
+                      <button onclick="pushNotification('customer', 'Calling Helper', '${w.nameEn}: ${w.phone}');renderAll()" class="px-3 py-1.5 rounded-xl bg-[var(--secondary)] text-[var(--secondary-foreground)] text-xs font-semibold">
+                        📞 ${t('callBtn')}
+                      </button>
+                    ` : b.status === 'completed' ? `
+                      <div class="flex items-center gap-0.5">
+                        ${[1, 2, 3, 4, 5].map(st => `<button onclick="b=state.bookings.find(x=>x.id==='${b.id}');if(b){b.rating=${st};renderAll();}" class="text-sm px-0.5 ${(b.rating || 0) >= st ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)] opacity-40'}">★</button>`).join('')}
+                      </div>
+                    ` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      // Explore View — Calm, Clean, Zero Banner Clutter
+      const workers = state.workers.filter(w => state.selectedTrade === 'all' || w.trade === state.selectedTrade);
+      return `
+        <div class="p-4 space-y-4">
+          <!-- Clean Single Search Box -->
+          <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl px-3.5 py-2.5 flex items-center gap-2.5">
+            <span class="text-xs text-[var(--muted-foreground)]">🔍</span>
+            <input
+              type="text"
+              data-focus-key="cust-search"
+              value="${state.searchQuery.replace(/"/g, '&quot;')}"
+              oninput="handleSearch(this.value)"
+              placeholder="${t('searchPlaceholder')}"
+              class="w-full bg-transparent text-xs text-[var(--foreground)] placeholder:text-[var(--placeholder)] focus:outline-none min-w-0"
+            />
+            ${state.searchQuery ? `<button onclick="handleSearch('')" class="text-xs text-[var(--muted-foreground)]">✕</button>` : ''}
+          </div>
+
+          ${state.aiHint ? `
+            <div class="px-1 flex items-center justify-between text-xs text-[var(--muted-foreground)]">
+              <span>Showing matching <strong>${state.aiHint}</strong> helpers</span>
+              <button onclick="handleSearch('')" class="underline">Reset</button>
+            </div>
+          ` : ''}
+
+          <!-- Clean Category Pills -->
+          <div class="flex gap-2 overflow-x-auto no-scrollbar">
+            ${TRADES.map(tr => {
+              const active = state.selectedTrade === tr.id;
+              return `<button onclick="state.selectedTrade='${tr.id}';renderAll()" class="px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition ${active ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)]' : 'bg-[var(--card)] text-[var(--foreground)] border-[var(--border)]'}">${tr.icon}${state.lang === 'hi' ? tr.hi : tr.en}</button>`;
+            }).join('')}
+          </div>
+
+          <!-- Spacious, Uncluttered Worker Cards -->
+          <div class="space-y-3">
+            ${workers.map(w => {
+              const selected = isSplit && state.selectedWorkerId === w.id;
+              return `
+                <div onclick="openWorkerDetail('${w.id}')" class="cursor-pointer bg-[var(--card)] border ${selected ? 'border-[var(--primary)]' : 'border-[var(--border)]'} rounded-2xl p-4 hover:opacity-95 transition">
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 min-w-0 flex-1">
+                      <div class="w-11 h-11 rounded-full bg-[var(--secondary)] text-[var(--secondary-foreground)] font-semibold text-xs flex items-center justify-center shrink-0">
+                        ${w.initials}
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <div class="text-sm font-semibold text-[var(--foreground)] truncate">
+                          ${state.lang === 'hi' ? w.nameHi : w.nameEn} ${w.verified ? '<span class="text-xs font-normal text-[var(--muted-foreground)]">✓</span>' : ''}
+                        </div>
+                        <div class="text-xs text-[var(--muted-foreground)] truncate mt-0.5">
+                          ${getTradeName(w.trade)} · ${w.exp} yrs
+                        </div>
+                      </div>
+                    </div>
+                    <div class="text-xs font-semibold text-[var(--foreground)] shrink-0">★ ${w.rating}</div>
+                  </div>
+
+                  <div class="mt-3.5 pt-3 border-t border-[var(--border)] flex items-center justify-between gap-2">
+                    <div class="text-xs text-[var(--muted-foreground)]">
+                      <strong class="text-sm font-bold text-[var(--foreground)]">₹${w.visitFee}</strong> ${t('visitLabel')} · ₹${w.hourlyRate}/hr
+                    </div>
+                    <span class="px-3.5 py-1.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold">
+                      ${t('bookBtn')}
+                    </span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // --- Calm Professional Workspace Screens ---
+    function renderWorkerBody() {
+      const ramesh = state.workers[0];
+      if (state.proTab === 'khata') {
+        return renderWorkerRatesAndKhata(ramesh);
+      }
+
+      const myJobs = state.bookings.filter(b => b.workerId === 'w1');
+      const requests = myJobs.filter(b => b.status === 'requested');
+      const schedule = myJobs.filter(b => b.status === 'confirmed' || b.status === 'in_progress');
+
+      return `
+        <div class="p-4 space-y-4">
+          <!-- Clean Availability Toggle -->
+          <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 flex items-center justify-between gap-3">
+            <div>
+              <div class="text-sm font-semibold text-[var(--foreground)]">${state.lang === 'hi' ? ramesh.nameHi : ramesh.nameEn}</div>
+              <div class="text-xs text-[var(--muted-foreground)]">${t('availableToggle')}</div>
+            </div>
+            <button onclick="state.workers[0].isOnline=!state.workers[0].isOnline;renderAll()" class="px-3.5 py-1.5 rounded-full text-xs font-semibold border transition ${ramesh.isOnline ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)]' : 'bg-[var(--content)] text-[var(--muted-foreground)] border-[var(--border)]'}">
+              ${ramesh.isOnline ? 'Online' : 'Paused'}
+            </button>
+          </div>
+
+          <!-- New Requests -->
+          <div class="space-y-2.5">
+            <h3 class="px-1 text-xs font-semibold text-[var(--muted-foreground)]">${t('newRequests')} (${requests.length})</h3>
+            ${requests.length === 0 ? `
+              <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 text-xs text-[var(--muted-foreground)]">
+                No pending requests right now.
+              </div>
+            ` : requests.map(b => `
+              <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs font-semibold text-[var(--foreground)]">${b.date} · ${b.slot}</span>
+                  <span class="text-xs font-semibold text-[var(--muted-foreground)]">₹${b.visitFee} ${t('visitLabel')}</span>
+                </div>
+                <div class="text-xs text-[var(--muted-foreground)] space-y-0.5">
+                  <div class="text-[var(--foreground)] font-medium">${b.locality} (${b.pin})</div>
+                  <div>${b.issueNote}</div>
+                </div>
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                  <button onclick="handleWorkerJobAction('${b.id}', 'accept')" class="py-2 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold">${t('acceptBtn')}</button>
+                  <button onclick="handleWorkerJobAction('${b.id}', 'decline')" class="py-2 rounded-xl bg-[var(--content)] text-[var(--muted-foreground)] border border-[var(--border)] text-xs font-medium">${t('declineBtn')}</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Upcoming Schedule -->
+          <div class="space-y-2.5">
+            <h3 class="px-1 text-xs font-semibold text-[var(--muted-foreground)]">${t('upcomingJobs')} (${schedule.length})</h3>
+            ${schedule.length === 0 ? `
+              <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 text-xs text-[var(--muted-foreground)]">
+                Confirmed bookings appear here.
+              </div>
+            ` : schedule.map(b => `
+              <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-sm font-semibold text-[var(--foreground)]">${b.customerName}</span>
+                  <span class="text-xs text-[var(--muted-foreground)]">${b.slot}</span>
+                </div>
+                <div class="text-xs text-[var(--muted-foreground)]">${b.fullAddress}</div>
+                <div class="flex gap-2 pt-1">
+                  <button onclick="pushNotification('worker', 'Calling Customer', '${b.customerName}: ${b.customerPhone}');renderAll()" class="px-3.5 py-2 rounded-xl bg-[var(--secondary)] text-[var(--secondary-foreground)] text-xs font-semibold">📞 ${t('callBtn')}</button>
+                  ${b.status === 'confirmed' ? `
+                    <button onclick="handleWorkerJobAction('${b.id}', 'start')" class="flex-1 py-2 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold">${t('startWorkBtn')}</button>
+                  ` : `
+                    <button onclick="handleWorkerJobAction('${b.id}', 'settle')" class="flex-1 py-2 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold">${t('completeBtn')}</button>
+                  `}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderWorkerRatesAndKhata(ramesh) {
+      // Note: Export Khata is strictly inside Settings -> More Options, NOT here!
+      return `
+        <div class="p-4 space-y-4">
+          <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
+            <h3 class="text-xs font-semibold text-[var(--muted-foreground)]">${t('khataSummary')}</h3>
+            <div class="grid grid-cols-3 gap-2">
+              <div class="p-2.5 rounded-xl bg-[var(--content)]">
+                <div class="text-xs text-[var(--muted-foreground)]">${t('today')}</div>
+                <div class="text-base font-bold text-[var(--foreground)] mt-0.5">₹${ramesh.khataToday}</div>
+              </div>
+              <div class="p-2.5 rounded-xl bg-[var(--content)]">
+                <div class="text-xs text-[var(--muted-foreground)]">${t('thisMonth')}</div>
+                <div class="text-base font-bold text-[var(--foreground)] mt-0.5">₹${ramesh.khataMonth}</div>
+              </div>
+              <div class="p-2.5 rounded-xl bg-[var(--content)]">
+                <div class="text-xs text-[var(--muted-foreground)]">${t('completed')}</div>
+                <div class="text-base font-bold text-[var(--foreground)] mt-0.5">${ramesh.jobsCount}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
+            <h3 class="text-xs font-semibold text-[var(--muted-foreground)]">${t('myRates')}</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-[var(--muted-foreground)] mb-1">${t('visitFee')} (₹)</label>
+                <input type="text" inputmode="numeric" data-focus-key="rate-visit" value="${ramesh.visitFee}" oninput="const n=parseInt(this.value,10);if(!isNaN(n)){state.workers[0].visitFee=n;}" class="w-full px-3 py-2 rounded-xl bg-[var(--content)] border border-[var(--border)] text-sm font-semibold text-[var(--foreground)] focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs text-[var(--muted-foreground)] mb-1">${t('hourlyRate')} (₹)</label>
+                <input type="text" inputmode="numeric" data-focus-key="rate-hr" value="${ramesh.hourlyRate}" oninput="const n=parseInt(this.value,10);if(!isNaN(n)){state.workers[0].hourlyRate=n;}" class="w-full px-3 py-2 rounded-xl bg-[var(--content)] border border-[var(--border)] text-sm font-semibold text-[var(--foreground)] focus:outline-none" />
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs text-[var(--muted-foreground)] mb-1.5">Available Time Slots</label>
+              <div class="grid grid-cols-2 gap-2">
+                ${SLOTS.map(s => {
+                  const blocked = ramesh.blockedSlots.includes(s);
+                  return `<button onclick="const arr=state.workers[0].blockedSlots;const i=arr.indexOf('${s}');if(i>=0)arr.splice(i,1);else arr.push('${s}');renderAll()" class="py-1.5 px-2 rounded-xl text-xs border truncate ${blocked ? 'opacity-45 line-through bg-[var(--content)] border-[var(--border)]' : 'bg-[var(--secondary)] text-[var(--secondary-foreground)] border-[var(--border)] font-medium'}">${s}</button>`;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // --- Phone Shell (Clean Header: Location + User Icon ONLY) ---
+    function renderPhoneShell(roleSide, caption) {
+      const subPage = getSubPage(roleSide);
+      const pendingReqCount = state.bookings.filter(b => b.workerId === 'w1' && b.status === 'requested').length;
+
+      return `
+        <div class="flex flex-col items-center">
+          ${caption ? `<div class="mb-2 text-xs font-medium text-[var(--muted-foreground)]">${caption}</div>` : ''}
+          <div class="phone-frame relative bg-[var(--background)] border border-[var(--border)] rounded-[32px] shadow-md overflow-hidden flex flex-col">
+            ${renderTopNotification(roleSide)}
+
+            ${subPage ? renderSubPageContent(roleSide, subPage) : `
+              <!-- Clean, Uncluttered App Header: Brand/PIN on left, User Icon on right -->
+              <div class="bg-[var(--card)] border-b border-[var(--border)] px-4 py-3.5 flex items-center justify-between gap-3 shrink-0">
+                <div class="min-w-0">
+                  <div class="text-base font-bold text-[var(--foreground)] leading-tight">${t('appName')}</div>
+                  <button onclick="setSubPage('${roleSide}', 'pin_select')" class="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] mt-0.5 flex items-center gap-1">
+                    <span>📍 ${state.pin}</span>
+                    <span>▾</span>
+                  </button>
+                </div>
+                ${renderUserAvatarButton(roleSide)}
+              </div>
+
+              <!-- Main Body -->
+              <div class="flex-1 overflow-y-auto overflow-x-hidden">
+                ${roleSide === 'customer' ? renderCustomerBody(false) : renderWorkerBody()}
+              </div>
+
+              <!-- Simple 2-Item Bottom Bar -->
+              <div class="bg-[var(--card)] border-t border-[var(--border)] grid grid-cols-2 px-3 py-2 gap-2 shrink-0">
+                ${roleSide === 'customer' ? `
+                  <button onclick="state.custTab='explore';renderAll()" class="py-2 rounded-xl text-xs font-semibold transition ${state.custTab === 'explore' ? 'bg-[var(--secondary)] text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}">
+                    ${t('exploreTab')}
+                  </button>
+                  <button onclick="state.custTab='bookings';renderAll()" class="py-2 rounded-xl text-xs font-semibold transition ${state.custTab === 'bookings' ? 'bg-[var(--secondary)] text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}">
+                    ${t('bookingsTab')} (${state.bookings.length})
+                  </button>
+                ` : `
+                  <button onclick="state.proTab='jobs';renderAll()" class="py-2 rounded-xl text-xs font-semibold transition ${state.proTab === 'jobs' ? 'bg-[var(--secondary)] text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}">
+                    ${t('jobsTab')}${pendingReqCount ? ` (${pendingReqCount})` : ''}
+                  </button>
+                  <button onclick="state.proTab='khata';renderAll()" class="py-2 rounded-xl text-xs font-semibold transition ${state.proTab === 'khata' ? 'bg-[var(--secondary)] text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}">
+                    ${t('khataTab')}
+                  </button>
+                `}
+              </div>
+            `}
+          </div>
+        </div>
+      `;
+    }
+
+    // --- Clean Responsive Web / Tablet View ---
+    function renderWebSplitView() {
+      const roleSide = state.workspace;
+      const subPage = getSubPage(roleSide);
+      return `
+        <div class="w-full bg-[var(--card)] border border-[var(--border)] rounded-3xl shadow-md overflow-hidden relative min-h-[680px] flex flex-col">
+          ${renderTopNotification(roleSide)}
+
+          ${subPage ? `<div class="max-w-md w-full mx-auto flex-1 py-4">${renderSubPageContent(roleSide, subPage)}</div>` : `
+            <div class="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between gap-4">
+              <div class="flex items-center gap-4">
+                <span class="text-base font-bold text-[var(--foreground)]">${t('appName')}</span>
+                <button onclick="setSubPage('${roleSide}', 'pin_select')" class="px-3 py-1 rounded-full bg-[var(--content)] border border-[var(--border)] text-xs text-[var(--muted-foreground)]">📍 ${state.pin} ▾</button>
+              </div>
+              <div class="flex items-center gap-3">
+                ${roleSide === 'customer' ? `
+                  <button onclick="state.custTab='explore';renderAll()" class="px-3 py-1.5 rounded-xl text-xs font-semibold ${state.custTab === 'explore' ? 'bg-[var(--secondary)] text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}">${t('exploreTab')}</button>
+                  <button onclick="state.custTab='bookings';renderAll()" class="px-3 py-1.5 rounded-xl text-xs font-semibold ${state.custTab === 'bookings' ? 'bg-[var(--secondary)] text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}">${t('bookingsTab')} (${state.bookings.length})</button>
+                ` : ''}
+                ${renderUserAvatarButton(roleSide)}
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-12 flex-1">
+              <div class="md:col-span-7 border-r border-[var(--border)] bg-[var(--background)] max-h-[620px] overflow-y-auto">
+                ${roleSide === 'customer' ? renderCustomerBody(true) : (() => { const p = state.proTab; state.proTab = 'jobs'; const h = renderWorkerBody(); state.proTab = p; return h; })()}
+              </div>
+              <div class="md:col-span-5 bg-[var(--background)] max-h-[620px] overflow-y-auto">
+                ${roleSide === 'customer' ? renderWorkerDetailPane(state.selectedWorkerId) : renderWorkerRatesAndKhata(state.workers[0])}
+              </div>
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    function renderAll() {
+      const activeEl = document.activeElement;
+      const focusKey = activeEl && activeEl.dataset ? activeEl.dataset.focusKey : null;
+      const selPos = activeEl && typeof activeEl.selectionStart === 'number' ? activeEl.selectionStart : null;
+
+      const vpBar = document.getElementById('viewportSwitcher');
+      const modes = [
+        { id: 'mobile', label: 'Mobile' },
+        { id: 'dual', label: 'Dual Live Sync' },
+        { id: 'tablet', label: 'Web / Tablet' }
+      ];
+      vpBar.innerHTML = modes.map(m => `
+        <button onclick="state.viewport='${m.id}';renderAll()" class="px-3 py-1 rounded-lg text-xs font-medium transition ${state.viewport === m.id ? 'bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}">
+          ${m.label}
+        </button>
+      `).join('');
+
+      const roleBar = document.getElementById('rolePreviewSwitcher');
+      if (state.viewport === 'dual') {
+        roleBar.classList.add('hidden');
+      } else {
+        roleBar.classList.remove('hidden');
+        roleBar.innerHTML = [
+          { id: 'customer', label: 'Customer Account' },
+          { id: 'worker', label: 'Professional Account' }
+        ].map(r => `
+          <button onclick="state.workspace='${r.id}';state.custSubPage=null;state.proSubPage=null;renderAll()" class="px-3 py-1 rounded-lg text-xs font-medium transition ${state.workspace === r.id ? 'bg-[var(--secondary)] text-[var(--foreground)] font-semibold' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}">
+            ${r.label}
+          </button>
+        `).join('');
+      }
+
+      const stage = document.getElementById('stageContainer');
+      if (state.viewport === 'mobile') {
+        stage.innerHTML = renderPhoneShell(state.workspace, '');
+      } else if (state.viewport === 'dual') {
+        stage.innerHTML =
+          renderPhoneShell('customer', 'Customer View') +
+          renderPhoneShell('worker', 'Professional View');
+      } else {
+        stage.innerHTML = renderWebSplitView();
+      }
+
+      if (focusKey) {
+        const nextEl = document.querySelector(`[data-focus-key="${focusKey}"]`);
+        if (nextEl) {
+          nextEl.focus();
+          if (selPos !== null && typeof nextEl.setSelectionRange === 'function') {
+            try { nextEl.setSelectionRange(selPos, selPos); } catch (_) {}
+          }
+        }
+      }
+    }
+
+    renderAll();
+  </script>
+</body>
+</html>

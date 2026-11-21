@@ -1,0 +1,634 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/models.dart';
+import 'gcp_backend_service.dart';
+import 'notification_service.dart';
+
+class VaultStorage extends ChangeNotifier {
+  VaultStorage._();
+  static final VaultStorage instance = VaultStorage._();
+
+  static const String _marketplaceBookingsKey = 'dailyhelper_marketplace_bookings_v1';
+  static const String _marketplaceWorkersKey = 'dailyhelper_marketplace_workers_v1';
+
+  static const List<String> standardSlots = [
+    '09:00 - 11:00 AM',
+    '11:00 - 01:00 PM',
+    '02:00 - 04:00 PM',
+    '04:00 - 06:00 PM',
+  ];
+
+  AppUser _activeUser = AppUser.visitor();
+  String _sessionToken = 'local_visitor';
+
+  String _lang = 'en';
+  String _pinCode = '560034';
+  bool _remindersEnabled = true;
+  bool _defaultSeeded = false;
+  bool _proStarterSeeded = false;
+
+  List<WorkerProfile> _workers = [];
+  List<BookingRecord> _userBookings = [];
+  List<AppNotificationItem> _notifications = [];
+
+  // Getters
+  String get lang => _lang;
+  String get pinCode => _pinCode;
+  bool get remindersEnabled => _remindersEnabled;
+  List<WorkerProfile> get workers => List.unmodifiable(_workers);
+  List<BookingRecord> get bookings => List.unmodifiable(_userBookings);
+
+  AppNotificationItem? get activeTopNotification {
+    if (!_remindersEnabled) return null;
+    for (final n in _notifications) {
+      if (!n.isDismissed) return n;
+    }
+    return null;
+  }
+
+  String _vaultKeyFor(String userId) => 'dailyhelper_vault_v1_$userId';
+
+  String get todayIso {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
+
+  List<Map<String, String>> get upcomingDateChoices {
+    final now = DateTime.now();
+    final d1 = now.add(const Duration(days: 1));
+    final d2 = now.add(const Duration(days: 2));
+    String fmt(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    return [
+      {'id': fmt(now), 'en': 'Today', 'hi': 'आज'},
+      {'id': fmt(d1), 'en': 'Tomorrow', 'hi': 'कल'},
+      {'id': fmt(d2), 'en': '${d2.day}/${d2.month}', 'hi': '${d2.day}/${d2.month}'},
+    ];
+  }
+
+  void _clearInMemory() {
+    _lang = 'en';
+    _pinCode = '560034';
+    _remindersEnabled = true;
+    _defaultSeeded = false;
+    _proStarterSeeded = false;
+    _workers = [];
+    _userBookings = [];
+    _notifications = [];
+  }
+
+  static List<WorkerProfile> _starterWorkers() => const [
+        WorkerProfile(
+          id: 'w1',
+          nameEn: 'Ramesh Kumar',
+          nameHi: 'रमेश कुमार',
+          trade: 'electrician',
+          skillsEn: ['Switchboard & MCB Repair', 'Ceiling Fan & Regulator', 'Geyser Point Wiring'],
+          skillsHi: ['स्विचबोर्ड और एमसीबी रिपेयर', 'पंखा और रेगुलेटर', 'गीज़र वायरिंग'],
+          servicePins: ['560034', '110001', '400050'],
+          experienceYears: 8,
+          visitFeeInr: 149,
+          hourlyRateInr: 250,
+          upiId: 'ramesh.elec@okaxis',
+          phone: '+91 99001 44556',
+          languages: 'Hindi, English',
+          verified: true,
+          isOnline: true,
+          ratingAvg: 4.9,
+          jobsCompleted: 64,
+          khataTodayInr: 450,
+          khataMonthInr: 18400,
+        ),
+        WorkerProfile(
+          id: 'w2',
+          nameEn: 'Suresh Yadav',
+          nameHi: 'सुरेश यादव',
+          trade: 'plumber',
+          skillsEn: ['Tap & Mixer Leak', 'Flush Tank Repair', 'Kitchen Sink Unclog'],
+          skillsHi: ['नल और मिक्सर लीक', 'फ्लश टैंक रिपेयर', 'किचन सिंक अनब्लॉक'],
+          servicePins: ['560034', '110001', '400050'],
+          experienceYears: 6,
+          visitFeeInr: 129,
+          hourlyRateInr: 220,
+          upiId: 'suresh.plumb@paytm',
+          phone: '+91 98112 33445',
+          languages: 'Hindi, English',
+          verified: true,
+          isOnline: true,
+          ratingAvg: 4.7,
+          jobsCompleted: 41,
+          khataTodayInr: 300,
+          khataMonthInr: 15200,
+        ),
+        WorkerProfile(
+          id: 'w3',
+          nameEn: 'Salim Ansari',
+          nameHi: 'सलीम अंसारी',
+          trade: 'carpenter',
+          skillsEn: ['Door Lock & Hinge Fix', 'Wardrobe Sliding Track', 'Curtain Rod & Drill'],
+          skillsHi: ['दरवाजा लॉक और कब्जा', 'अलमारी स्लाइडिंग रिपेयर', 'पर्दा रॉड और ड्रिलिंग'],
+          servicePins: ['560034', '110001', '400050'],
+          experienceYears: 14,
+          visitFeeInr: 149,
+          hourlyRateInr: 300,
+          upiId: 'salim.wood@ybl',
+          phone: '+91 98204 77889',
+          languages: 'Hindi, English',
+          verified: true,
+          isOnline: true,
+          blockedSlots: ['11:00 - 01:00 PM'],
+          ratingAvg: 4.8,
+          jobsCompleted: 92,
+          khataTodayInr: 600,
+          khataMonthInr: 24500,
+        ),
+        WorkerProfile(
+          id: 'w4',
+          nameEn: 'Vikram Sharma',
+          nameHi: 'विक्रम शर्मा',
+          trade: 'appliance',
+          skillsEn: ['Split AC Servicing', 'Washing Machine Repair', 'RO Water Purifier'],
+          skillsHi: ['स्प्लिट एसी सर्विस', 'वाशिंग मशीन रिपेयर', 'आरओ वाटर प्यूरीफायर'],
+          servicePins: ['560034', '110001', '400050'],
+          experienceYears: 9,
+          visitFeeInr: 199,
+          hourlyRateInr: 350,
+          upiId: 'vikram.cool@okicici',
+          phone: '+91 97390 55661',
+          languages: 'Hindi, English',
+          verified: true,
+          isOnline: true,
+          ratingAvg: 4.9,
+          jobsCompleted: 78,
+          khataTodayInr: 898,
+          khataMonthInr: 29100,
+        ),
+        WorkerProfile(
+          id: 'w5',
+          nameEn: 'Manoj Verma',
+          nameHi: 'मनोज वर्मा',
+          trade: 'painter',
+          skillsEn: ['Dampness & Putty Patch', 'Single Room Repaint', 'Wood Touch-up'],
+          skillsHi: ['सीलन और पुट्टी रिपेयर', 'एक कमरा पेंटिंग', 'लकड़ी पॉलिश'],
+          servicePins: ['560034', '110001', '400050'],
+          experienceYears: 11,
+          visitFeeInr: 99,
+          hourlyRateInr: 200,
+          upiId: 'manoj.paint@ybl',
+          phone: '+91 96501 88990',
+          languages: 'Hindi',
+          verified: true,
+          isOnline: true,
+          ratingAvg: 4.6,
+          jobsCompleted: 29,
+          khataTodayInr: 0,
+          khataMonthInr: 16800,
+        ),
+      ];
+
+  Map<String, dynamic> exportSnapshotMap() => {
+        'lang': _lang,
+        'pinCode': _pinCode,
+        'remindersEnabled': _remindersEnabled,
+        'defaultSeeded': _defaultSeeded,
+        'proStarterSeeded': _proStarterSeeded,
+        'bookings': _userBookings.map((b) => b.toMap()).toList(),
+        'notifications': _notifications.map((n) => n.toMap()).toList(),
+      };
+
+  void _hydrateFromMap(Map<String, dynamic> map) {
+    _lang = (map['lang'] ?? 'en').toString();
+    _pinCode = (map['pinCode'] ?? '560034').toString();
+    _remindersEnabled = map['remindersEnabled'] != false;
+    _defaultSeeded = map['defaultSeeded'] == true;
+    _proStarterSeeded = map['proStarterSeeded'] == true;
+
+    final bList = (map['bookings'] as List<dynamic>? ?? []);
+    _userBookings = bList
+        .map((e) => BookingRecord.fromMap(Map<String, dynamic>.from(e as Map)))
+        .toList();
+
+    final nList = (map['notifications'] as List<dynamic>? ?? []);
+    _notifications = nList
+        .map((e) => AppNotificationItem.fromMap(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<List<WorkerProfile>> _loadSharedWorkers(SharedPreferences prefs) async {
+    final raw = prefs.getString(_marketplaceWorkersKey);
+    if (raw == null || raw.isEmpty) {
+      final starters = _starterWorkers();
+      await prefs.setString(
+        _marketplaceWorkersKey,
+        jsonEncode(starters.map((w) => w.toMap()).toList()),
+      );
+      return List<WorkerProfile>.from(starters);
+    }
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .map((e) => WorkerProfile.fromMap(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (_) {
+      return List<WorkerProfile>.from(_starterWorkers());
+    }
+  }
+
+  Future<void> _saveSharedWorkers(SharedPreferences prefs) async {
+    await prefs.setString(
+      _marketplaceWorkersKey,
+      jsonEncode(_workers.map((w) => w.toMap()).toList()),
+    );
+  }
+
+  Future<List<BookingRecord>> _loadAllMarketplaceBookings(SharedPreferences prefs) async {
+    final raw = prefs.getString(_marketplaceBookingsKey);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .map((e) => BookingRecord.fromMap(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> _saveAllMarketplaceBookings(
+    SharedPreferences prefs,
+    List<BookingRecord> all,
+  ) async {
+    await prefs.setString(
+      _marketplaceBookingsKey,
+      jsonEncode(all.map((b) => b.toMap()).toList()),
+    );
+  }
+
+  Future<void> loadForUser(AppUser user, {required String token}) async {
+    _clearInMemory();
+    _activeUser = user;
+    _sessionToken = token;
+
+    final prefs = await SharedPreferences.getInstance();
+    _workers = await _loadSharedWorkers(prefs);
+
+    final vaultRaw = prefs.getString(_vaultKeyFor(user.id));
+    if (vaultRaw != null && vaultRaw.isNotEmpty) {
+      try {
+        _hydrateFromMap(Map<String, dynamic>.from(jsonDecode(vaultRaw) as Map));
+      } catch (_) {}
+    }
+
+    if (!_defaultSeeded) {
+      _defaultSeeded = true;
+    }
+
+    // Ensure Professional account has its own WorkerProfile + starter request once
+    if (!user.isGuest && user.role == UserRole.professional) {
+      final hasProfile = _workers.any((w) => w.id == user.id);
+      if (!hasProfile) {
+        _workers.insert(
+          0,
+          WorkerProfile(
+            id: user.id,
+            nameEn: user.name,
+            nameHi: user.name,
+            trade: user.trade,
+            skillsEn: const ['Inspection & Repair', 'Installation & Maintenance'],
+            skillsHi: const ['जांच और रिपेयर', 'फिटिंग और मेंटेनेंस'],
+            servicePins: [_pinCode, '560034'],
+            experienceYears: 5,
+            visitFeeInr: 149,
+            hourlyRateInr: 250,
+            upiId: '${user.name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')}@upi',
+            phone: user.phone.isEmpty ? '+91 99001 44556' : user.phone,
+            languages: 'Hindi, English',
+            verified: true,
+            isOnline: true,
+          ),
+        );
+        await _saveSharedWorkers(prefs);
+      }
+
+      final allBookings = await _loadAllMarketplaceBookings(prefs);
+      if (!_proStarterSeeded) {
+        _proStarterSeeded = true;
+        final hasStarter = allBookings.any((b) => b.id == 'BK-1048-${user.id}');
+        if (!hasStarter) {
+          final starter = BookingRecord(
+            id: 'BK-1048-${user.id}',
+            customerId: 'seed_customer_arjun',
+            customerName: 'Arjun Nair',
+            customerPhone: '+91 98802 66771',
+            workerId: user.id,
+            workerNameEn: user.name,
+            workerNameHi: user.name,
+            workerPhone: user.phone,
+            trade: user.trade,
+            pinCode: _pinCode,
+            locality: 'PIN $_pinCode',
+            fullAddress: 'House #18, 2nd Cross',
+            bookingDate: todayIso,
+            slotWindow: '11:00 - 01:00 PM',
+            issueNote: 'Switchboard tripping on load',
+            visitFeeInr: 149,
+            status: 'requested',
+            createdAt: DateTime.now().toIso8601String(),
+          );
+          allBookings.insert(0, starter);
+          await _saveAllMarketplaceBookings(prefs, allBookings);
+          _notifications.insert(
+            0,
+            AppNotificationItem(
+              id: 'notif_seed_${user.id}',
+              title: 'New Booking Request',
+              body: 'Arjun Nair requested Today, 11:00 - 01:00 PM in PIN $_pinCode.',
+              createdAt: DateTime.now().toIso8601String(),
+            ),
+          );
+        }
+      }
+      _userBookings = allBookings.where((b) => b.workerId == user.id).toList();
+    } else if (!user.isGuest && user.role == UserRole.customer) {
+      final allBookings = await _loadAllMarketplaceBookings(prefs);
+      final sharedForUser = allBookings.where((b) => b.customerId == user.id).toList();
+      if (sharedForUser.isNotEmpty) {
+        _userBookings = sharedForUser;
+      }
+    }
+
+    // Real-Calendar Resilience: auto-expire stale unanswered requests from past ISO dates
+    bool changed = false;
+    final today = todayIso;
+    for (int i = 0; i < _userBookings.length; i++) {
+      final b = _userBookings[i];
+      if (b.status == 'requested' &&
+          RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(b.bookingDate) &&
+          b.bookingDate.compareTo(today) < 0) {
+        _userBookings[i] = b.copyWith(status: 'expired');
+        changed = true;
+      }
+    }
+    if (changed) {
+      await _persistToDisk();
+    } else {
+      await prefs.setString(_vaultKeyFor(user.id), jsonEncode(exportSnapshotMap()));
+    }
+
+    notifyListeners();
+    _pullCloudIfEmpty();
+  }
+
+  Future<void> upgradeOrLoadUser(
+    AppUser newUser, {
+    required String token,
+    Map<String, dynamic>? guestSnapshot,
+  }) async {
+    await loadForUser(newUser, token: token);
+    if (guestSnapshot != null) {
+      final guestLang = guestSnapshot['lang']?.toString();
+      final guestPin = guestSnapshot['pinCode']?.toString();
+      if (guestLang != null && guestLang.isNotEmpty) _lang = guestLang;
+      if (guestPin != null && guestPin.isNotEmpty) _pinCode = guestPin;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_vaultKeyFor('local_guest_vault'));
+      await _persistToDisk();
+      notifyListeners();
+    }
+  }
+
+  Future<void> clearOnSignOut() async {
+    _clearInMemory();
+    _activeUser = AppUser.visitor();
+    _sessionToken = 'local_visitor';
+    final prefs = await SharedPreferences.getInstance();
+    _workers = await _loadSharedWorkers(prefs);
+    notifyListeners();
+  }
+
+  Future<void> _pullCloudIfEmpty() async {
+    if (_activeUser.isGuest || _sessionToken.startsWith('local_')) return;
+    if (_userBookings.isNotEmpty) return;
+    final cloud = await GcpBackendService.instance.fetchVaultSnapshot(_sessionToken);
+    if (cloud != null && cloud.isNotEmpty) {
+      _hydrateFromMap(cloud);
+      await _persistToDisk(syncCloud: false);
+      notifyListeners();
+    }
+  }
+
+  Future<void> _persistToDisk({bool syncCloud = true}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final snap = exportSnapshotMap();
+    await prefs.setString(_vaultKeyFor(_activeUser.id), jsonEncode(snap));
+    if (syncCloud && !_activeUser.isGuest && !_sessionToken.startsWith('local_')) {
+      GcpBackendService.instance.pushVaultSnapshot(_sessionToken, snap);
+    }
+  }
+
+  // --- User Preferences & Top Notifications ---
+  Future<void> setLanguage(String newLang) async {
+    _lang = newLang;
+    await _persistToDisk();
+    notifyListeners();
+  }
+
+  Future<void> setPinCode(String newPin) async {
+    final clean = newPin.trim();
+    if (clean.length != 6) return;
+    _pinCode = clean;
+    await _persistToDisk();
+    notifyListeners();
+  }
+
+  Future<void> setRemindersEnabled(bool enabled) async {
+    _remindersEnabled = enabled;
+    await NotificationService.instance.configureReminders(enabled: enabled);
+    await _persistToDisk();
+    notifyListeners();
+  }
+
+  Future<void> pushTopNotification({
+    required String title,
+    required String body,
+  }) async {
+    _notifications.insert(
+      0,
+      AppNotificationItem(
+        id: 'notif_${DateTime.now().microsecondsSinceEpoch}',
+        title: title,
+        body: body,
+        isDismissed: false,
+        createdAt: DateTime.now().toIso8601String(),
+      ),
+    );
+    await _persistToDisk();
+    notifyListeners();
+  }
+
+  Future<void> dismissTopNotification(String id) async {
+    final idx = _notifications.indexWhere((n) => n.id == id);
+    if (idx >= 0) {
+      _notifications[idx] = _notifications[idx].copyWith(isDismissed: true);
+      await _persistToDisk();
+      notifyListeners();
+    }
+  }
+
+  // --- Customer Booking Creation & Rating ---
+  Future<BookingRecord> createBooking({
+    required WorkerProfile worker,
+    required String dateStr,
+    required String slotWindow,
+    required String issueNote,
+    required String fullAddress,
+  }) async {
+    final booking = BookingRecord(
+      id: 'BK-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+      customerId: _activeUser.id,
+      customerName: _activeUser.name,
+      customerPhone: _activeUser.phone.isEmpty ? '+91 98450 11223' : _activeUser.phone,
+      workerId: worker.id,
+      workerNameEn: worker.nameEn,
+      workerNameHi: worker.nameHi,
+      workerPhone: worker.phone,
+      trade: worker.trade,
+      pinCode: _pinCode,
+      locality: 'PIN $_pinCode',
+      fullAddress: fullAddress.trim().isEmpty ? 'PIN $_pinCode' : fullAddress.trim(),
+      bookingDate: dateStr,
+      slotWindow: slotWindow,
+      issueNote: issueNote.trim().isEmpty ? 'General inspection & repair' : issueNote.trim(),
+      visitFeeInr: worker.visitFeeInr,
+      status: 'requested',
+      createdAt: DateTime.now().toIso8601String(),
+    );
+
+    _userBookings.insert(0, booking);
+    final prefs = await SharedPreferences.getInstance();
+    final all = await _loadAllMarketplaceBookings(prefs);
+    all.insert(0, booking);
+    await _saveAllMarketplaceBookings(prefs, all);
+
+    await pushTopNotification(
+      title: 'Booking Requested',
+      body: '${worker.localizedName(_lang)} · $dateStr, $slotWindow',
+    );
+    return booking;
+  }
+
+  Future<void> rateCompletedBooking(String bookingId, int stars) async {
+    final idx = _userBookings.indexWhere((b) => b.id == bookingId);
+    if (idx < 0) return;
+    final updated = _userBookings[idx].copyWith(customerRating: stars);
+    _userBookings[idx] = updated;
+
+    final prefs = await SharedPreferences.getInstance();
+    final all = await _loadAllMarketplaceBookings(prefs);
+    final mIdx = all.indexWhere((b) => b.id == bookingId);
+    if (mIdx >= 0) {
+      all[mIdx] = updated;
+      await _saveAllMarketplaceBookings(prefs, all);
+    }
+    await _persistToDisk();
+    notifyListeners();
+  }
+
+  // --- Professional Job Actions, Rate Card & Khata ---
+  WorkerProfile get currentProfessionalProfile {
+    final idx = _workers.indexWhere((w) => w.id == _activeUser.id);
+    if (idx >= 0) return _workers[idx];
+    return _workers.first;
+  }
+
+  Future<void> updateProfessionalProfile({
+    int? visitFeeInr,
+    int? hourlyRateInr,
+    String? upiId,
+    bool? isOnline,
+    List<String>? blockedSlots,
+  }) async {
+    final targetId = _workers.any((w) => w.id == _activeUser.id) ? _activeUser.id : _workers.first.id;
+    final idx = _workers.indexWhere((w) => w.id == targetId);
+    if (idx < 0) return;
+
+    _workers[idx] = _workers[idx].copyWith(
+      visitFeeInr: visitFeeInr,
+      hourlyRateInr: hourlyRateInr,
+      upiId: upiId,
+      isOnline: isOnline,
+      blockedSlots: blockedSlots,
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    await _saveSharedWorkers(prefs);
+    await _persistToDisk();
+    notifyListeners();
+  }
+
+  Future<void> updateJobStatus(
+    String bookingId,
+    String newStatus, {
+    int? finalAmountInr,
+    String? paymentMethod,
+  }) async {
+    final idx = _userBookings.indexWhere((b) => b.id == bookingId);
+    if (idx < 0) return;
+
+    final updated = _userBookings[idx].copyWith(
+      status: newStatus,
+      finalAmountInr: finalAmountInr,
+      paymentMethod: paymentMethod,
+    );
+    _userBookings[idx] = updated;
+
+    final prefs = await SharedPreferences.getInstance();
+    final all = await _loadAllMarketplaceBookings(prefs);
+    final mIdx = all.indexWhere((b) => b.id == bookingId);
+    if (mIdx >= 0) {
+      all[mIdx] = updated;
+      await _saveAllMarketplaceBookings(prefs, all);
+    }
+
+    if (newStatus == 'confirmed') {
+      if (_remindersEnabled) {
+        await NotificationService.instance.configureReminders(enabled: true);
+      }
+      await pushTopNotification(
+        title: 'Slot Confirmed',
+        body: 'Address unlocked: ${updated.fullAddress} · 60m reminder set.',
+      );
+    } else if (newStatus == 'completed') {
+      final amt = finalAmountInr ?? updated.visitFeeInr;
+      final pIdx = _workers.indexWhere((w) => w.id == _activeUser.id);
+      if (pIdx >= 0) {
+        final cur = _workers[pIdx];
+        _workers[pIdx] = cur.copyWith(
+          jobsCompleted: cur.jobsCompleted + 1,
+          khataTodayInr: cur.khataTodayInr + amt,
+          khataMonthInr: cur.khataMonthInr + amt,
+        );
+        await _saveSharedWorkers(prefs);
+      }
+      await pushTopNotification(
+        title: 'Payment Logged to Khata',
+        body: '₹$amt received via ${paymentMethod ?? 'Cash'} (0% commission).',
+      );
+    } else {
+      await _persistToDisk();
+      notifyListeners();
+    }
+  }
+
+  String generateKhataCsv() {
+    final buffer = StringBuffer('BookingID,Date,Slot,Customer,AmountINR,PaymentMethod,Commission\n');
+    for (final b in _userBookings.where((x) => x.status == 'completed')) {
+      final amt = b.finalAmountInr ?? b.visitFeeInr;
+      final method = b.paymentMethod ?? 'Cash';
+      final safeCust = b.customerName.replaceAll('"', '""');
+      buffer.writeln('${b.id},"${b.bookingDate}","${b.slotWindow}","$safeCust",$amt,$method,0%');
+    }
+    return buffer.toString();
+  }
+}

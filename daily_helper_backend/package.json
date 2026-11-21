@@ -1,0 +1,17 @@
+{
+  "name": "daily-helper-backend",
+  "version": "1.0.0",
+  "description": "Stateless Cloud Run API + PostgreSQL + $0 Gemini NLP + Bug Triage for DailyHelper",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test_backend.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "google-auth-library": "^9.14.1",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.13.0"
+  }
+}

@@ -1,0 +1,21 @@
+# Node / Backend
+node_modules/
+.env
+*.log
+
+# Flutter / Build
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/ephemeral/
+
+# Signing Secrets (NEVER COMMIT)
+*.jks
+*.keystore
+**/android/key.properties
+**/android/local.properties
+
+# OS
+.DS_Store
