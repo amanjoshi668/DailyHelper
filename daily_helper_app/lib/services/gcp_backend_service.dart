@@ -9,7 +9,7 @@ class GcpBackendService {
 
   static const String baseUrl = String.fromEnvironment(
     'DAILYHELPER_API_URL',
-    defaultValue: 'http://localhost:8080',
+    defaultValue: 'https://dailyhelper-backend-676039463235.us-central1.run.app',
   );
   static const String appVersion = '1.0.0';
   static const String _localBugsKey = 'dailyhelper_bug_reports_v1';

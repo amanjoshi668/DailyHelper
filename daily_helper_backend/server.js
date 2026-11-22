@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const https = require('https');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
@@ -18,15 +20,35 @@ const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : nul
 
 // --- Optional PostgreSQL Pool with Seamless In-Memory Fallback ---
 let pool = null;
-if (process.env.DATABASE_URL) {
-  pool = new Pool({ connectionString: process.env.DATABASE_URL });
-} else if (process.env.INSTANCE_CONNECTION_NAME && process.env.DB_USER && process.env.DB_NAME) {
+if (process.env.INSTANCE_CONNECTION_NAME && process.env.DB_USER && process.env.DB_NAME) {
   pool = new Pool({
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     host: `/cloudsql/${process.env.INSTANCE_CONNECTION_NAME}`
   });
+} else if (process.env.DATABASE_URL) {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  });
+}
+if (pool) {
+  pool.on('error', err => console.error('[PostgreSQL] Idle pool error:', err.message));
+}
+
+async function autoMigrateSchema() {
+  if (!pool) return;
+  try {
+    const sqlPath = path.join(__dirname, 'schema.sql');
+    if (fs.existsSync(sqlPath)) {
+      const sql = fs.readFileSync(sqlPath, 'utf8');
+      await pool.query(sql);
+      console.log('[PostgreSQL] DailyHelper schema verified.');
+    }
+  } catch (err) {
+    console.error('[PostgreSQL] Auto-migration warning:', err.message);
+  }
 }
 
 // --- In-Memory Store (Used when DB is not configured) ---
@@ -215,16 +237,24 @@ async function createNotification({ userId, bookingId = null, title, body }) {
 
 // --- Health & Privacy Routes ---
 app.get('/health', async (_req, res) => {
-  let dbMode = 'in-memory';
+  let database = 'in-memory';
   if (pool) {
     try {
       await pool.query('SELECT 1');
-      dbMode = 'postgres';
+      database = 'connected';
     } catch (_) {
-      dbMode = 'in-memory-fallback';
+      database = 'in-memory-fallback';
     }
   }
-  res.json({ status: 'ok', service: 'daily-helper-backend', version: '1.0.0', dbMode });
+  res.json({
+    status: 'ok',
+    service: 'dailyhelper-backend',
+    version: '1.0.0',
+    database,
+    dbMode: database,
+    googleAuthEnabled: Boolean(GOOGLE_CLIENT_ID),
+    geminiConfigured: Boolean(GEMINI_API_KEY)
+  });
 });
 
 app.get('/privacy', (_req, res) => {
@@ -851,10 +881,26 @@ app.patch('/api/v1/bugs/:id', async (req, res) => {
   }
 });
 
-if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`DailyHelper backend listening on port ${PORT}`);
+// --- Serve Bundled Flutter Web App (if present in ./public) ---
+const publicDir = path.join(__dirname, 'public');
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/auth/') || req.path === '/health' || req.path === '/privacy') {
+      return next();
+    }
+    const indexHtml = path.join(publicDir, 'index.html');
+    if (fs.existsSync(indexHtml)) return res.sendFile(indexHtml);
+    return next();
   });
 }
 
-module.exports = { app };
+if (require.main === module) {
+  autoMigrateSchema().finally(() => {
+    app.listen(PORT, () => {
+      console.log(`DailyHelper backend listening on port ${PORT}`);
+    });
+  });
+}
+
+module.exports = { app, autoMigrateSchema };

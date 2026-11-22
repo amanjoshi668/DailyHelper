@@ -5,6 +5,7 @@ node_modules/
 
 # Flutter / Build
 **/build/
+release_uploads/
 **/.dart_tool/
 **/.flutter-plugins
 **/.flutter-plugins-dependencies

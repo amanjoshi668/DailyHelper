@@ -1,30 +1,30 @@
-# DailyHelper — Cloud Run & Cloud SQL Deployment Guide
+# DailyHelper — Cloud Run & Play Store Deployment Guide
 
-## 1. Secret Manager Setup
-Store secrets in Google Cloud Secret Manager (`JWT_SECRET`, `DATABASE_URL`, `GEMINI_API_KEY`, `GOOGLE_CLIENT_ID`):
+## 1. Pre-Configured GCP Infrastructure (`bullet-journal-514307`)
+- **GCP Project ID:** `bullet-journal-514307` (`us-central1`)
+- **Cloud Run Service:** `dailyhelper-backend`
+- **Live Cloud Run URL (Web App + REST API):** `https://dailyhelper-backend-676039463235.us-central1.run.app`
+- **Live Privacy Policy URL:** `https://dailyhelper-backend-676039463235.us-central1.run.app/privacy`
+- **Cloud SQL PostgreSQL Instance:** `keystone-postgres` -> isolated database `dailyhelper_db` (auto-created by `deploy_cloudshell.sh`, tables auto-migrated from `schema.sql` on server startup).
+- **Secret Manager Entries:**
+  - `dailyhelper-jwt-secret` (auto-generated 256-bit secret)
+  - `keystone-gemini-key` (shared `$0.00` free-tier `gemini-2.5-flash-lite` key)
+  - `starlist-db-password` / `dailyhelper-db-password` (Cloud SQL `postgres` password)
+
+## 2. One-Command Cloud Shell Deployment
+Open Google Cloud Shell (`bullet-journal-514307`) and run:
 ```bash
-printf "replace-with-strong-random-jwt-secret" | gcloud secrets create JWT_SECRET --data-file=-
-printf "postgresql://postgres:PASS@/dailyhelper?host=/cloudsql/PROJECT:REGION:INSTANCE" | gcloud secrets create DATABASE_URL --data-file=-
-printf "AIza..." | gcloud secrets create GEMINI_API_KEY --data-file=-
-printf "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com" | gcloud secrets create GOOGLE_CLIENT_ID --data-file=-
+git clone https://github.com/amanjoshi668/DailyHelper.git
+cd DailyHelper/daily_helper_backend
+./deploy_cloudshell.sh
+```
+For subsequent updates:
+```bash
+cd ~/DailyHelper && git pull && cd daily_helper_backend && ./deploy_cloudshell.sh
 ```
 
-## 2. Database Schema Initialization
-Apply `daily_helper_backend/schema.sql` against your Cloud SQL PostgreSQL database:
-```bash
-psql "$DATABASE_URL" -f daily_helper_backend/schema.sql
-```
-
-## 3. Deploy Stateless API to Cloud Run
-```bash
-cd daily_helper_backend
-GCP_PROJECT_ID="<your-gcp-project>" GCP_REGION="asia-south1" ./deploy_cloudshell.sh
-```
-
-## 4. Point Flutter Client to Production URL
-Pass `--dart-define=DAILYHELPER_API_URL=https://daily-helper-api-xxxx.a.run.app` during release builds:
-```bash
-cd daily_helper_app
-flutter build appbundle --release --dart-define=DAILYHELPER_API_URL=https://daily-helper-api-xxxx.a.run.app
-flutter build apk --release --dart-define=DAILYHELPER_API_URL=https://daily-helper-api-xxxx.a.run.app
-```
+## 3. Google Play Console Release Uploads (`release_uploads/`)
+All Play Console artifacts are compiled against `https://dailyhelper-backend-676039463235.us-central1.run.app` (`minSdk 24`, `targetSdk 36`) and staged in `release_uploads/`:
+1. `release_uploads/app-release.aab` — Signed Android App Bundle
+2. `release_uploads/native-debug-symbols.zip` — Native debug symbols (`⋮` -> *Upload native debug symbols (.zip)*)
+3. `release_uploads/app-release.apk` — Direct-install Android APK

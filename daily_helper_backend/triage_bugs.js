@@ -8,7 +8,10 @@
 const http = require('http');
 const https = require('https');
 
-const BASE_URL = (process.env.DAILYHELPER_API_URL || 'http://localhost:8080').replace(/\/$/, '');
+const BASE_URL = (
+  process.env.DAILYHELPER_API_URL ||
+  'https://dailyhelper-backend-676039463235.us-central1.run.app'
+).replace(/\/$/, '');
 
 function requestJson(method, path, body = null) {
   return new Promise((resolve, reject) => {
