@@ -18,8 +18,8 @@ object ReminderScheduler {
     private const val KEY_PM_H = "pmHour"
     private const val KEY_PM_M = "pmMinute"
 
-    const val ACTION_AM = "com.dailyhelper.daily_helper_app.REMINDER_AM"
-    const val ACTION_PM = "com.dailyhelper.daily_helper_app.REMINDER_PM"
+    const val ACTION_AM = "com.dumbmonk.dailyhelper.REMINDER_AM"
+    const val ACTION_PM = "com.dumbmonk.dailyhelper.REMINDER_PM"
     private const val REQ_AM = 5201
     private const val REQ_PM = 5202
 

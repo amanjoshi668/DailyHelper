@@ -40,7 +40,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.dailyhelper.daily_helper_app"
+        applicationId "com.dumbmonk.dailyhelper"
         minSdkVersion 24
         targetSdkVersion 36
         versionCode flutterVersionCode.toInteger()

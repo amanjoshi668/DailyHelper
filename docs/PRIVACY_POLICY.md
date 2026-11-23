@@ -1,7 +1,7 @@
 # DailyHelper — Privacy Policy
 
 **Effective Date:** November 21, 2026  
-**App Name:** DailyHelper (`com.dailyhelper.daily_helper_app`)
+**App Name:** DailyHelper (`com.dumbmonk.dailyhelper`)
 
 DailyHelper connects households and small businesses with local independent blue-collar professionals (electricians, plumbers, carpenters, appliance technicians, and painters).
 
