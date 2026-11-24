@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/models.dart';
 import 'gcp_backend_service.dart';
 import 'vault_storage.dart';
@@ -89,15 +90,19 @@ class AuthService extends ChangeNotifier {
       pin: pin,
     );
 
+    if (cloudRes.error != null) {
+      return cloudRes.error;
+    }
+
     AppUser newUser;
     String newToken;
-    if (cloudRes != null && cloudRes['user'] != null) {
-      final uMap = Map<String, dynamic>.from(cloudRes['user'] as Map);
+    if (cloudRes.data != null && cloudRes.data!['user'] != null) {
+      final uMap = Map<String, dynamic>.from(cloudRes.data!['user'] as Map);
       uMap['trade'] = trade;
       newUser = AppUser.fromMap(uMap);
-      newToken = (cloudRes['token'] ?? 'local_${newUser.id}').toString();
+      newToken = (cloudRes.data!['token'] ?? 'local_${newUser.id}').toString();
     } else {
-      // Offline-first local registration
+      // Offline-first fallback when Cloud Run is unreachable
       final prefs = await SharedPreferences.getInstance();
       final accountsRaw = prefs.getString(_localAccountsKey);
       final accounts = accountsRaw != null
@@ -156,9 +161,13 @@ class AuthService extends ChangeNotifier {
       password: password,
     );
 
-    if (cloudRes != null && cloudRes['user'] != null) {
-      final newUser = AppUser.fromMap(Map<String, dynamic>.from(cloudRes['user'] as Map));
-      final newToken = (cloudRes['token'] ?? 'local_${newUser.id}').toString();
+    if (cloudRes.error != null) {
+      return cloudRes.error;
+    }
+
+    if (cloudRes.data != null && cloudRes.data!['user'] != null) {
+      final newUser = AppUser.fromMap(Map<String, dynamic>.from(cloudRes.data!['user'] as Map));
+      final newToken = (cloudRes.data!['token'] ?? 'local_${newUser.id}').toString();
       _currentUser = newUser;
       _sessionToken = newToken;
       await _persistSession();
@@ -171,7 +180,7 @@ class AuthService extends ChangeNotifier {
       return null;
     }
 
-    // 2. Check local offline accounts
+    // 2. Offline fallback local accounts
     final prefs = await SharedPreferences.getInstance();
     final accountsRaw = prefs.getString(_localAccountsKey);
     final accounts = accountsRaw != null
@@ -203,6 +212,46 @@ class AuthService extends ChangeNotifier {
 
   Future<String?> signInWithGoogle({required UserRole role}) async {
     final guestSnapshot = _currentUser.isGuest ? VaultStorage.instance.exportSnapshotMap() : null;
+
+    // 1. Attempt live Cloud Run external-browser Google Sign-In handoff
+    final init = await GcpBackendService.instance.initMobileGoogleAuth(role);
+    if (init != null && init['sessionId'] != null && init['authUrl'] != null) {
+      final sessionId = init['sessionId'].toString();
+      final authUri = Uri.parse('${GcpBackendService.baseUrl}${init['authUrl']}');
+      bool launched = false;
+      try {
+        launched = await launchUrl(authUri, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        launched = false;
+      }
+      if (launched) {
+        for (int i = 0; i < 30; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 1500));
+          final poll = await GcpBackendService.instance.pollMobileGoogleAuth(sessionId);
+          if (poll == null) break;
+          if (poll['status'] == 'complete' && poll['user'] != null && poll['token'] != null) {
+            final newUser = AppUser.fromMap(Map<String, dynamic>.from(poll['user'] as Map));
+            final newToken = poll['token'].toString();
+            _currentUser = newUser;
+            _sessionToken = newToken;
+            await _persistSession();
+            await VaultStorage.instance.upgradeOrLoadUser(
+              newUser,
+              token: newToken,
+              guestSnapshot: guestSnapshot,
+            );
+            notifyListeners();
+            return null;
+          }
+          if (poll['status'] == 'expired') {
+            return 'Google Sign-In session expired. Please try again.';
+          }
+        }
+        return 'Google Sign-In timed out. Complete sign-in in your browser or use Email/Password.';
+      }
+    }
+
+    // 2. Offline / test fallback when Cloud Run or external browser is unavailable
     final isPro = role == UserRole.professional;
     final email = isPro ? 'ramesh.pro@gmail.com' : 'priya.customer@gmail.com';
     final name = isPro ? 'Ramesh Kumar' : 'Priya Menon';

@@ -363,4 +363,65 @@ void main() {
     expect(find.text('Earnings Summary (0% Fee)'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('CUJ 8: Customer Cancel Booking + Professional Save Rate Card & UPI/PINs at 360x800',
+      (WidgetTester tester) async {
+    setMobileViewport(tester);
+
+    // 1. Customer books & cancels cleanly
+    await AuthService.instance.registerWithEmail(
+      name: 'Neha Rao',
+      email: 'neha@example.com',
+      password: 'password123',
+      phone: '+919845099887',
+      role: UserRole.customer,
+    );
+    await tester.pumpWidget(const DailyHelperApp());
+    await tester.pumpAndSettle();
+
+    final bookBtn = find.byKey(const Key('book_worker_btn_w1'));
+    await tester.ensureVisible(bookBtn);
+    await tester.tap(bookBtn);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('booking_address_field')), 'Apt 12B, Indiranagar');
+    final confirmBtn = find.byKey(const Key('confirm_booking_btn'));
+    await tester.ensureVisible(confirmBtn);
+    await tester.tap(confirmBtn);
+    await tester.pumpAndSettle();
+
+    // Dismiss top notification and tap Cancel on booking
+    await tester.tap(find.byKey(const Key('dismiss_top_notification_btn')));
+    await tester.pumpAndSettle();
+    final cancelBtn = find.text('Cancel').first;
+    await tester.ensureVisible(cancelBtn);
+    await tester.tap(cancelBtn);
+    await tester.pumpAndSettle();
+    expect(find.text('CANCELLED'), findsOneWidget);
+
+    // 2. Professional edits Visit Fee, UPI ID, and Serviceable PINs via explicit Save Changes button
+    await AuthService.instance.signOut();
+    await AuthService.instance.registerWithEmail(
+      name: 'Vikram Pro',
+      email: 'vikrampro@example.com',
+      password: 'password123',
+      phone: '+919900112233',
+      role: UserRole.professional,
+      trade: 'electrician',
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('pro_tab_khata')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('pro_visit_fee_field')), '179');
+    await tester.enterText(find.byKey(const Key('pro_upi_field')), 'vikram@okaxis');
+    await tester.enterText(find.byKey(const Key('pro_pins_field')), '560034, 560038');
+    final saveBtn = find.byKey(const Key('pro_save_rates_btn'));
+    await tester.ensureVisible(saveBtn);
+    await tester.tap(saveBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Rate Card Updated'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

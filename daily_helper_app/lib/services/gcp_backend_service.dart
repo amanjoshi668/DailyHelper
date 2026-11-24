@@ -3,6 +3,14 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 
+class AuthApiResult {
+  final Map<String, dynamic>? data;
+  final String? error;
+  final bool isOffline;
+
+  const AuthApiResult({this.data, this.error, this.isOffline = false});
+}
+
 class GcpBackendService {
   GcpBackendService._();
   static final GcpBackendService instance = GcpBackendService._();
@@ -11,12 +19,12 @@ class GcpBackendService {
     'DAILYHELPER_API_URL',
     defaultValue: 'https://dailyhelper-backend-676039463235.us-central1.run.app',
   );
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.1.0';
   static const String _localBugsKey = 'dailyhelper_bug_reports_v1';
 
   http.Client httpClient = http.Client();
 
-  Future<Map<String, dynamic>?> register({
+  Future<AuthApiResult> register({
     required String name,
     required String email,
     required String password,
@@ -40,15 +48,23 @@ class GcpBackendService {
               'pin': pin,
             }),
           )
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 4));
+      final body = resp.body.isNotEmpty
+          ? Map<String, dynamic>.from(jsonDecode(resp.body) as Map)
+          : <String, dynamic>{};
       if (resp.statusCode == 201 || resp.statusCode == 200) {
-        return jsonDecode(resp.body) as Map<String, dynamic>;
+        return AuthApiResult(data: body);
       }
-    } catch (_) {}
-    return null;
+      if (resp.statusCode >= 400 && resp.statusCode < 500) {
+        return AuthApiResult(error: (body['error'] ?? 'Registration failed').toString());
+      }
+      return const AuthApiResult(isOffline: true);
+    } catch (_) {
+      return const AuthApiResult(isOffline: true);
+    }
   }
 
-  Future<Map<String, dynamic>?> login({
+  Future<AuthApiResult> login({
     required String email,
     required String password,
   }) async {
@@ -59,12 +75,217 @@ class GcpBackendService {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'email': email, 'password': password}),
           )
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 4));
+      final body = resp.body.isNotEmpty
+          ? Map<String, dynamic>.from(jsonDecode(resp.body) as Map)
+          : <String, dynamic>{};
       if (resp.statusCode == 200) {
-        return jsonDecode(resp.body) as Map<String, dynamic>;
+        return AuthApiResult(data: body);
+      }
+      if (resp.statusCode >= 400 && resp.statusCode < 500) {
+        return AuthApiResult(error: (body['error'] ?? 'Invalid email or password').toString());
+      }
+      return const AuthApiResult(isOffline: true);
+    } catch (_) {
+      return const AuthApiResult(isOffline: true);
+    }
+  }
+
+  Future<Map<String, dynamic>?> initMobileGoogleAuth(UserRole role) async {
+    try {
+      final resp = await httpClient
+          .post(
+            Uri.parse('$baseUrl/api/v1/auth/mobile-google/init'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'role': userRoleToString(role)}),
+          )
+          .timeout(const Duration(seconds: 4));
+      if (resp.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(resp.body) as Map);
       }
     } catch (_) {}
     return null;
+  }
+
+  Future<Map<String, dynamic>?> pollMobileGoogleAuth(String sessionId) async {
+    try {
+      final resp = await httpClient
+          .get(Uri.parse('$baseUrl/api/v1/auth/mobile-google/poll?session=$sessionId'))
+          .timeout(const Duration(seconds: 4));
+      if (resp.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(resp.body) as Map);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // --- Live Multi-Device Marketplace Endpoints ---
+  Future<List<WorkerProfile>?> fetchWorkers() async {
+    try {
+      final resp = await httpClient
+          .get(Uri.parse('$baseUrl/api/v1/workers'))
+          .timeout(const Duration(seconds: 4));
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final rows = (data['workers'] as List<dynamic>? ?? []);
+        return rows
+            .map((e) => WorkerProfile.fromMap(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<WorkerProfile?> updateMyWorkerProfile(
+    String token, {
+    int? visitFeeInr,
+    int? hourlyRateInr,
+    String? upiId,
+    List<String>? servicePins,
+    bool? isOnline,
+    List<String>? blockedSlots,
+  }) async {
+    if (token.startsWith('local_')) return null;
+    try {
+      final payload = <String, dynamic>{};
+      if (visitFeeInr != null) payload['visitFeeInr'] = visitFeeInr;
+      if (hourlyRateInr != null) payload['hourlyRateInr'] = hourlyRateInr;
+      if (upiId != null) payload['upiId'] = upiId;
+      if (servicePins != null) payload['servicePins'] = servicePins;
+      if (isOnline != null) payload['isOnline'] = isOnline;
+      if (blockedSlots != null) payload['blockedSlots'] = blockedSlots;
+
+      final resp = await httpClient
+          .put(
+            Uri.parse('$baseUrl/api/v1/workers/me'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 4));
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        if (data['worker'] is Map) {
+          return WorkerProfile.fromMap(Map<String, dynamic>.from(data['worker'] as Map));
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<List<BookingRecord>?> fetchBookings(String token) async {
+    if (token.startsWith('local_')) return null;
+    try {
+      final resp = await httpClient.get(
+        Uri.parse('$baseUrl/api/v1/bookings'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 4));
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final rows = (data['bookings'] as List<dynamic>? ?? []);
+        return rows
+            .map((e) => BookingRecord.fromMap(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<BookingRecord?> createCloudBooking(String token, BookingRecord booking) async {
+    if (token.startsWith('local_')) return null;
+    try {
+      final resp = await httpClient
+          .post(
+            Uri.parse('$baseUrl/api/v1/bookings'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({
+              'id': booking.id,
+              'customerName': booking.customerName,
+              'customerPhone': booking.customerPhone,
+              'workerId': booking.workerId,
+              'workerName': booking.workerNameEn,
+              'workerPhone': booking.workerPhone,
+              'trade': booking.trade,
+              'pinCode': booking.pinCode,
+              'locality': booking.locality,
+              'fullAddress': booking.fullAddress,
+              'bookingDate': booking.bookingDate,
+              'slotWindow': booking.slotWindow,
+              'issueNote': booking.issueNote,
+              'visitFeeInr': booking.visitFeeInr,
+            }),
+          )
+          .timeout(const Duration(seconds: 4));
+      if (resp.statusCode == 201 || resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        if (data['booking'] is Map) {
+          return BookingRecord.fromMap(Map<String, dynamic>.from(data['booking'] as Map));
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> updateCloudBooking(
+    String token,
+    String bookingId, {
+    String? status,
+    int? finalAmountInr,
+    String? paymentMethod,
+    int? customerRating,
+  }) async {
+    if (token.startsWith('local_')) return;
+    try {
+      final payload = <String, dynamic>{};
+      if (status != null) payload['status'] = status;
+      if (finalAmountInr != null) payload['finalAmountInr'] = finalAmountInr;
+      if (paymentMethod != null) payload['paymentMethod'] = paymentMethod;
+      if (customerRating != null) payload['customerRating'] = customerRating;
+
+      await httpClient
+          .patch(
+            Uri.parse('$baseUrl/api/v1/bookings/$bookingId'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 4));
+    } catch (_) {}
+  }
+
+  Future<List<AppNotificationItem>?> fetchNotifications(String token) async {
+    if (token.startsWith('local_')) return null;
+    try {
+      final resp = await httpClient.get(
+        Uri.parse('$baseUrl/api/v1/notifications'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 4));
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body) as Map<String, dynamic>;
+        final rows = (data['notifications'] as List<dynamic>? ?? []);
+        return rows
+            .map((e) => AppNotificationItem.fromMap(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> dismissCloudNotification(String token, String id) async {
+    if (token.startsWith('local_') || id.startsWith('notif_')) return;
+    try {
+      await httpClient.patch(
+        Uri.parse('$baseUrl/api/v1/notifications/$id/dismiss'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 3));
+    } catch (_) {}
   }
 
   Future<Map<String, dynamic>?> fetchVaultSnapshot(String token) async {
@@ -136,7 +357,7 @@ class GcpBackendService {
               'userEmail': record.userEmail,
             }),
           )
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 4));
       if (resp.statusCode == 201 || resp.statusCode == 200) {
         final data = jsonDecode(resp.body) as Map<String, dynamic>;
         final bug = data['bug'] as Map<String, dynamic>?;
@@ -192,7 +413,8 @@ class GcpBackendService {
         final serverOpenForUser = <BugReportRecord>[];
 
         for (final r in rows) {
-          final rec = BugReportRecord.fromMap(Map<String, dynamic>.from(r as Map)).copyWith(syncedToCloud: true);
+          final rec = BugReportRecord.fromMap(Map<String, dynamic>.from(r as Map))
+              .copyWith(syncedToCloud: true);
           if (rec.status == 'resolved') {
             resolvedIds.add(rec.id);
             resolvedSigs.add(rec.signature);

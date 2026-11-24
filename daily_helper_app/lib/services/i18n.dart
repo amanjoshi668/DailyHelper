@@ -57,6 +57,12 @@ class AppStrings {
       'submitBug': 'Submit Bug Report',
       'openReports': 'Your Open Reports',
       'noOpenBugs': 'No open bugs! Fixed issues are automatically hidden.',
+      'cancel': 'Cancel',
+      'bookAgain': 'Book Again',
+      'saveChanges': 'Save Changes',
+      'upiId': 'UPI ID (for QR payment)',
+      'servicePins': 'Serviceable PIN Codes',
+      'visitGuarantee': 'Fair Visit Rule: Only the visit fee applies if you decline repair after inspection.',
     },
     'hi': {
       'appName': 'DailyHelper',
@@ -115,6 +121,12 @@ class AppStrings {
       'submitBug': 'रिपोर्ट भेजें',
       'openReports': 'आपकी खुली रिपोर्ट्स',
       'noOpenBugs': 'कोई खुली समस्या नहीं है!',
+      'cancel': 'रद्द करें',
+      'bookAgain': 'फिर बुक करें',
+      'saveChanges': 'बदलाव सेव करें',
+      'upiId': 'UPI आईडी (QR पेमेंट के लिए)',
+      'servicePins': 'सेवा पिन कोड',
+      'visitGuarantee': 'नियम: जांच के बाद काम न कराने पर केवल विज़िट शुल्क देना होगा।',
     },
   };
 

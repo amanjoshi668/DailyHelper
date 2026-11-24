@@ -17,7 +17,7 @@ class HomeShellScreen extends StatefulWidget {
   State<HomeShellScreen> createState() => _HomeShellScreenState();
 }
 
-class _HomeShellScreenState extends State<HomeShellScreen> {
+class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingObserver {
   int _custTabIndex = 0; // 0: Explore, 1: Bookings
   int _proTabIndex = 0; // 0: Jobs, 1: Rates & Khata
 
@@ -29,6 +29,8 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
   final _searchCtrl = TextEditingController();
   final _visitFeeCtrl = TextEditingController();
   final _hourlyRateCtrl = TextEditingController();
+  final _upiIdCtrl = TextEditingController();
+  final _servicePinsCtrl = TextEditingController();
   String? _syncedProId;
 
   static const List<String> _tradeFilterIds = [
@@ -41,10 +43,26 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      VaultStorage.instance.refreshFromCloud();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _searchCtrl.dispose();
     _visitFeeCtrl.dispose();
     _hourlyRateCtrl.dispose();
+    _upiIdCtrl.dispose();
+    _servicePinsCtrl.dispose();
     super.dispose();
   }
 
@@ -204,15 +222,21 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
     final vault = VaultStorage.instance;
     final lang = vault.lang;
     final theme = Theme.of(context);
-    final filtered = vault.workers.where((w) {
+    final tradeOnline = vault.workers.where((w) {
       if (!w.isOnline) return false;
       if (_selectedTrade != 'all' && w.trade != _selectedTrade) return false;
       return true;
     }).toList();
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
+    final exactPin = tradeOnline.where((w) => w.servicePins.contains(vault.pinCode)).toList();
+    final filtered = exactPin.isNotEmpty ? exactPin : tradeOnline;
+    final showingNearbyFallback = exactPin.isEmpty && tradeOnline.isNotEmpty;
+
+    return RefreshIndicator(
+      onRefresh: vault.refreshFromCloud,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
         // Clean Single Search Input (Zero Guest Banner Clutter!)
         TextField(
           key: const Key('explore_search_field'),
@@ -288,7 +312,22 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
             },
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+
+        if (showingNearbyFallback) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10, left: 2),
+            child: Text(
+              'Showing nearby available helpers for PIN ${vault.pinCode}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ] else
+          const SizedBox(height: 4),
 
         // Spacious, Uncluttered Worker Cards
         for (final w in filtered)
@@ -401,7 +440,8 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
               ),
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -444,108 +484,148 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
       );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, i) {
-        final b = items[i];
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: theme.colorScheme.outlineVariant),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      b.localizedWorkerName(lang),
-                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.secondaryContainer,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      b.status.toUpperCase(),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: theme.colorScheme.onSecondaryContainer,
+    return RefreshIndicator(
+      onRefresh: vault.refreshFromCloud,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, i) {
+          final b = items[i];
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        b.localizedWorkerName(lang),
+                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${AppStrings.tradeLabel(lang, b.trade)} · ${b.bookingDate}, ${b.slotWindow}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.secondaryContainer,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        b.status.toUpperCase(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.onSecondaryContainer,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              Text(b.issueNote, style: theme.textTheme.bodyMedium),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 10),
-                child: Divider(height: 1),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Flexible(
-                    child: Text(
+                const SizedBox(height: 4),
+                Text(
+                  '${AppStrings.tradeLabel(lang, b.trade)} · ${b.bookingDate}, ${b.slotWindow}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Text(b.issueNote, style: theme.textTheme.bodyMedium),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Divider(height: 1),
+                ),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Text(
                       b.finalAmountInr != null
                           ? 'Paid ₹${b.finalAmountInr} (${b.paymentMethod ?? 'Cash'})'
                           : '₹${b.visitFeeInr} ${AppStrings.tr(lang, 'visit')}',
                       style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  if (b.status == 'confirmed' || b.status == 'in_progress')
-                    OutlinedButton.icon(
-                      onPressed: () => _dialPhone(b.workerPhone, b.workerNameEn),
-                      icon: const Icon(Icons.phone_outlined, size: 16),
-                      label: Text(AppStrings.tr(lang, 'call')),
-                    )
-                  else if (b.status == 'completed')
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: List.generate(5, (starIdx) {
-                        final st = starIdx + 1;
-                        final active = (b.customerRating ?? 0) >= st;
-                        return InkWell(
-                          onTap: () => vault.rateCompletedBooking(b.id, st),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 2),
-                            child: Icon(
-                              active ? Icons.star : Icons.star_border,
-                              size: 20,
-                              color: active
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurfaceVariant,
-                            ),
+                    if (b.status == 'requested')
+                      OutlinedButton(
+                        key: Key('cust_cancel_btn_${b.id}'),
+                        onPressed: () => vault.cancelBooking(b.id),
+                        style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                        child: Text(AppStrings.tr(lang, 'cancel')),
+                      )
+                    else if (b.status == 'confirmed' || b.status == 'in_progress')
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () => _dialPhone(b.workerPhone, b.workerNameEn),
+                            style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                            icon: const Icon(Icons.phone_outlined, size: 16),
+                            label: Text(AppStrings.tr(lang, 'call')),
                           ),
-                        );
-                      }),
-                    ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
+                          if (b.status == 'confirmed') ...[
+                            const SizedBox(width: 6),
+                            TextButton(
+                              key: Key('cust_cancel_btn_${b.id}'),
+                              onPressed: () => vault.cancelBooking(b.id),
+                              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                              child: Text(AppStrings.tr(lang, 'cancel')),
+                            ),
+                          ],
+                        ],
+                      )
+                    else if (b.status == 'completed')
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ...List.generate(5, (starIdx) {
+                            final st = starIdx + 1;
+                            final active = (b.customerRating ?? 0) >= st;
+                            return InkWell(
+                              onTap: () => vault.rateCompletedBooking(b.id, st),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 2),
+                                child: Icon(
+                                  active ? Icons.star : Icons.star_border,
+                                  size: 20,
+                                  color: active
+                                      ? theme.colorScheme.primary
+                                      : theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            );
+                          }),
+                          const SizedBox(width: 8),
+                          FilledButton.tonal(
+                            key: Key('cust_rebook_btn_${b.id}'),
+                            style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                            onPressed: () {
+                              final w = vault.workers.firstWhere(
+                                (x) => x.id == b.workerId,
+                                orElse: () => vault.workers.first,
+                              );
+                              _openWorkerForBooking(context, w, false);
+                            },
+                            child: Text(AppStrings.tr(lang, 'bookAgain')),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -560,9 +640,11 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
         .where((b) => b.status == 'confirmed' || b.status == 'in_progress')
         .toList();
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
+    return RefreshIndicator(
+      onRefresh: vault.refreshFromCloud,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
         // Clean Online Availability Card
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -779,7 +861,8 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
                 ],
               ),
             ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -793,11 +876,33 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
       _syncedProId = pro.id;
       _visitFeeCtrl.text = pro.visitFeeInr.toString();
       _hourlyRateCtrl.text = pro.hourlyRateInr.toString();
+      _upiIdCtrl.text = pro.upiId;
+      _servicePinsCtrl.text = pro.servicePins.join(', ');
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
+    void saveRateCard() {
+      final visit = int.tryParse(_visitFeeCtrl.text.trim()) ?? pro.visitFeeInr;
+      final hourly = int.tryParse(_hourlyRateCtrl.text.trim()) ?? pro.hourlyRateInr;
+      final upi = _upiIdCtrl.text.trim();
+      final pins = _servicePinsCtrl.text
+          .split(RegExp(r'[\s,]+'))
+          .map((s) => s.trim())
+          .where((s) => RegExp(r'^\d{6}$').hasMatch(s))
+          .toList();
+      vault.updateProfessionalProfile(
+        visitFeeInr: visit,
+        hourlyRateInr: hourly,
+        upiId: upi.isEmpty ? pro.upiId : upi,
+        servicePins: pins.isEmpty ? pro.servicePins : pins,
+        showSavedNotif: true,
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: vault.refreshFromCloud,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
         // Clean Khata Summary Card (No Export Button on Home — tucked in Settings!)
         Container(
           padding: const EdgeInsets.all(16),
@@ -900,6 +1005,36 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('pro_upi_field'),
+                controller: _upiIdCtrl,
+                decoration: InputDecoration(
+                  isDense: true,
+                  labelText: AppStrings.tr(lang, 'upiId'),
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('pro_pins_field'),
+                controller: _servicePinsCtrl,
+                decoration: InputDecoration(
+                  isDense: true,
+                  labelText: AppStrings.tr(lang, 'servicePins'),
+                  hintText: '560034, 560095',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  key: const Key('pro_save_rates_btn'),
+                  onPressed: saveRateCard,
+                  child: Text(AppStrings.tr(lang, 'saveChanges')),
+                ),
+              ),
               const SizedBox(height: 14),
               Text(
                 AppStrings.tr(lang, 'availableSlots'),
@@ -931,7 +1066,8 @@ class _HomeShellScreenState extends State<HomeShellScreen> {
             ],
           ),
         ),
-      ],
+        ],
+      ),
     );
   }
 

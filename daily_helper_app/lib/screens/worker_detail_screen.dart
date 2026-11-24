@@ -67,7 +67,7 @@ class _WorkerDetailPaneState extends State<WorkerDetailPane> {
     _selectedDate = dates.first['id']!;
     _selectedSlot = _firstOpenSlot(widget.worker);
     _noteCtrl = TextEditingController(text: widget.initialIssueNote);
-    _addrCtrl = TextEditingController(text: 'Flat 402, Palm Grove');
+    _addrCtrl = TextEditingController(text: VaultStorage.instance.savedAddress);
   }
 
   @override
@@ -202,6 +202,24 @@ class _WorkerDetailPaneState extends State<WorkerDetailPane> {
                       '★ ${w.ratingAvg.toStringAsFixed(1)}',
                       style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
                     ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      key: Key('save_helper_btn_${w.id}'),
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        vault.isWorkerSaved(w.id) ? Icons.favorite : Icons.favorite_border,
+                        size: 20,
+                        color: vault.isWorkerSaved(w.id)
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                      onPressed: () {
+                        vault.toggleSavedWorker(w.id);
+                        setState(() {});
+                      },
+                    ),
                   ],
                 ),
                 const Padding(
@@ -304,10 +322,34 @@ class _WorkerDetailPaneState extends State<WorkerDetailPane> {
             controller: _addrCtrl,
             decoration: InputDecoration(
               labelText: '${AppStrings.tr(lang, 'addressHint')} (PIN ${vault.pinCode})',
+              hintText: 'e.g., Flat 402, Palm Grove, near 4th Block',
               border: const OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceVariant.withOpacity(0.35),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.shield_outlined, size: 16, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    AppStrings.tr(lang, 'visitGuarantee'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
 
           FilledButton(
             key: const Key('confirm_booking_btn'),

@@ -249,7 +249,7 @@ app.get('/health', async (_req, res) => {
   res.json({
     status: 'ok',
     service: 'dailyhelper-backend',
-    version: '1.0.0',
+    version: '1.1.0',
     database,
     dbMode: database,
     googleAuthEnabled: Boolean(GOOGLE_CLIENT_ID),
@@ -531,34 +531,69 @@ app.post('/api/v1/dailyhelper/state', authenticateToken, async (req, res) => {
   return res.json({ success: true });
 });
 
+function mapDbWorkerRow(r) {
+  return {
+    id: r.user_id,
+    nameEn: r.name_en,
+    nameHi: r.name_hi || r.name_en,
+    trade: r.trade,
+    skillsEn: r.skills || [],
+    skillsHi: r.skills || [],
+    skills: r.skills || [],
+    servicePins: r.service_pins || ['560034'],
+    experienceYears: r.experience_years,
+    visitFeeInr: r.visit_fee_inr,
+    hourlyRateInr: r.hourly_rate_inr,
+    upiId: r.upi_id || '',
+    phone: r.phone || '',
+    languages: r.languages || 'Hindi, English',
+    verified: r.verified !== false,
+    isOnline: r.is_online !== false,
+    blockedSlots: r.blocked_slots || [],
+    ratingAvg: Number(r.rating_avg || 4.8),
+    jobsCompleted: r.jobs_completed || 0,
+    khataTodayInr: r.khata_today_inr || 0,
+    khataMonthInr: r.khata_month_inr || 0
+  };
+}
+
+function mapDbBookingRow(r) {
+  return {
+    id: r.id,
+    customerId: r.customer_id,
+    customerName: r.customer_name,
+    customerPhone: r.customer_phone || '',
+    workerId: r.worker_id,
+    workerNameEn: r.worker_name,
+    workerNameHi: r.worker_name,
+    workerPhone: r.worker_phone || '+91 99001 44556',
+    trade: r.trade,
+    pinCode: r.pin_code,
+    locality: r.locality || '',
+    fullAddress: r.full_address || '',
+    bookingDate: r.booking_date,
+    slotWindow: r.slot_window,
+    issueNote: r.issue_note || '',
+    visitFeeInr: r.visit_fee_inr,
+    finalAmountInr: r.final_amount_inr,
+    paymentMethod: r.payment_method,
+    status: r.status,
+    customerRating: r.customer_rating,
+    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at
+  };
+}
+
 // --- Workers Discovery & Professional Rate Card ---
 app.get('/api/v1/workers', async (req, res) => {
   const trade = String(req.query.trade || 'all').toLowerCase();
   let list = Array.from(mem.workers.values());
   if (pool) {
     try {
-      const q = await pool.query('SELECT * FROM worker_profiles WHERE is_online = TRUE ORDER BY rating_avg DESC');
+      const q = await pool.query('SELECT * FROM worker_profiles ORDER BY rating_avg DESC');
       if (q.rows.length > 0) {
-        const dbWorkers = q.rows.map(r => ({
-          id: r.user_id,
-          nameEn: r.name_en,
-          nameHi: r.name_hi || r.name_en,
-          trade: r.trade,
-          skills: r.skills || [],
-          servicePins: r.service_pins || [],
-          experienceYears: r.experience_years,
-          visitFeeInr: r.visit_fee_inr,
-          hourlyRateInr: r.hourly_rate_inr,
-          upiId: r.upi_id,
-          phone: r.phone,
-          languages: r.languages,
-          verified: r.verified,
-          isOnline: r.is_online,
-          blockedSlots: r.blocked_slots || [],
-          ratingAvg: Number(r.rating_avg),
-          jobsCompleted: r.jobs_completed
-        }));
-        list = [...dbWorkers, ...list];
+        const dbWorkers = q.rows.map(mapDbWorkerRow);
+        const dbIds = new Set(dbWorkers.map(w => w.id));
+        list = [...dbWorkers, ...list.filter(w => !dbIds.has(w.id))];
       }
     } catch (_) {}
   }
@@ -570,23 +605,67 @@ app.get('/api/v1/workers', async (req, res) => {
 
 app.put('/api/v1/workers/me', authenticateToken, async (req, res) => {
   const uid = req.user.id;
-  const existing = mem.workers.get(uid) || mem.workers.get('w1');
+  const existing = mem.workers.get(uid) || {
+    id: uid,
+    nameEn: req.user.name || 'Professional',
+    nameHi: req.user.name || 'Professional',
+    trade: String(req.body.trade || 'electrician'),
+    skills: ['Inspection & Repair'],
+    servicePins: ['560034'],
+    experienceYears: 5,
+    visitFeeInr: 149,
+    hourlyRateInr: 250,
+    upiId: '',
+    phone: '',
+    languages: 'Hindi, English',
+    verified: true,
+    isOnline: true,
+    blockedSlots: [],
+    ratingAvg: 4.8,
+    jobsCompleted: 0,
+    khataTodayInr: 0,
+    khataMonthInr: 0
+  };
   const updated = {
     ...existing,
     id: uid,
+    trade: String(req.body.trade ?? existing.trade),
     visitFeeInr: Number(req.body.visitFeeInr ?? existing.visitFeeInr),
     hourlyRateInr: Number(req.body.hourlyRateInr ?? existing.hourlyRateInr),
     upiId: String(req.body.upiId ?? existing.upiId),
+    servicePins: Array.isArray(req.body.servicePins) ? req.body.servicePins : existing.servicePins,
     isOnline: req.body.isOnline !== undefined ? Boolean(req.body.isOnline) : existing.isOnline,
     blockedSlots: Array.isArray(req.body.blockedSlots) ? req.body.blockedSlots : existing.blockedSlots
   };
   mem.workers.set(uid, updated);
   if (pool) {
     try {
-      await pool.query(
-        `UPDATE worker_profiles SET visit_fee_inr = $1, hourly_rate_inr = $2, upi_id = $3, is_online = $4, blocked_slots = $5::jsonb, updated_at = NOW() WHERE user_id = $6`,
-        [updated.visitFeeInr, updated.hourlyRateInr, updated.upiId, updated.isOnline, JSON.stringify(updated.blockedSlots), uid]
+      const q = await pool.query(
+        `INSERT INTO worker_profiles (user_id, name_en, name_hi, trade, service_pins, visit_fee_inr, hourly_rate_inr, upi_id, is_online, blocked_slots, updated_at)
+         VALUES ($1, $2, $2, $3, $4::jsonb, $5, $6, $7, $8, $9::jsonb, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET
+           trade = EXCLUDED.trade,
+           service_pins = EXCLUDED.service_pins,
+           visit_fee_inr = EXCLUDED.visit_fee_inr,
+           hourly_rate_inr = EXCLUDED.hourly_rate_inr,
+           upi_id = EXCLUDED.upi_id,
+           is_online = EXCLUDED.is_online,
+           blocked_slots = EXCLUDED.blocked_slots,
+           updated_at = NOW()
+         RETURNING *`,
+        [
+          uid,
+          updated.nameEn,
+          updated.trade,
+          JSON.stringify(updated.servicePins),
+          updated.visitFeeInr,
+          updated.hourlyRateInr,
+          updated.upiId,
+          updated.isOnline,
+          JSON.stringify(updated.blockedSlots)
+        ]
       );
+      if (q.rows[0]) return res.json({ worker: mapDbWorkerRow(q.rows[0]) });
     } catch (_) {}
   }
   res.json({ worker: updated });
@@ -600,7 +679,7 @@ app.get('/api/v1/bookings', authenticateToken, async (req, res) => {
         'SELECT * FROM bookings WHERE customer_id = $1 OR worker_id = $1 ORDER BY created_at DESC',
         [req.user.id]
       );
-      return res.json({ bookings: q.rows });
+      return res.json({ bookings: q.rows.map(mapDbBookingRow) });
     } catch (_) {}
   }
   const all = Array.from(mem.bookings.values()).filter(
@@ -616,7 +695,10 @@ app.post('/api/v1/bookings', authenticateToken, async (req, res) => {
     customerName: req.body.customerName || req.user.name || 'Customer',
     customerPhone: req.body.customerPhone || '',
     workerId: req.body.workerId || 'w1',
-    workerName: req.body.workerName || 'Ramesh Kumar',
+    workerNameEn: req.body.workerName || req.body.workerNameEn || 'Ramesh Kumar',
+    workerNameHi: req.body.workerNameHi || req.body.workerName || 'Ramesh Kumar',
+    workerName: req.body.workerName || req.body.workerNameEn || 'Ramesh Kumar',
+    workerPhone: req.body.workerPhone || '+91 99001 44556',
     trade: req.body.trade || 'electrician',
     pinCode: req.body.pinCode || '560034',
     locality: req.body.locality || '',
@@ -637,7 +719,8 @@ app.post('/api/v1/bookings', authenticateToken, async (req, res) => {
     try {
       await pool.query(
         `INSERT INTO bookings (id, customer_id, customer_name, customer_phone, worker_id, worker_name, trade, pin_code, locality, full_address, booking_date, slot_window, issue_note, visit_fee_inr, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+         ON CONFLICT (id) DO NOTHING`,
         [b.id, b.customerId, b.customerName, b.customerPhone, b.workerId, b.workerName, b.trade, b.pinCode, b.locality, b.fullAddress, b.bookingDate, b.slotWindow, b.issueNote, b.visitFeeInr, b.status]
       );
     } catch (_) {}
@@ -655,48 +738,82 @@ app.post('/api/v1/bookings', authenticateToken, async (req, res) => {
 
 app.patch('/api/v1/bookings/:id', authenticateToken, async (req, res) => {
   const id = req.params.id;
-  const b = mem.bookings.get(id);
-  if (!b && !pool) return res.status(404).json({ error: 'Booking not found' });
+  let updatedBooking = mem.bookings.get(id) || null;
+  if (!updatedBooking && !pool) return res.status(404).json({ error: 'Booking not found' });
 
-  if (b) {
-    if (req.body.status) b.status = req.body.status;
-    if (req.body.finalAmountInr !== undefined) b.finalAmountInr = Number(req.body.finalAmountInr);
-    if (req.body.paymentMethod) b.paymentMethod = req.body.paymentMethod;
-    if (req.body.customerRating !== undefined) b.customerRating = Number(req.body.customerRating);
-
-    if (req.body.status === 'confirmed') {
-      await createNotification({
-        userId: b.customerId,
-        bookingId: b.id,
-        title: 'Booking Confirmed!',
-        body: `${b.workerName} accepted ${b.bookingDate}, ${b.slotWindow}.`
-      });
-    } else if (req.body.status === 'completed') {
-      await createNotification({
-        userId: b.customerId,
-        bookingId: b.id,
-        title: 'Job Completed',
-        body: `Settled ₹${b.finalAmountInr || b.visitFeeInr} via ${b.paymentMethod || 'Cash'}.`
-      });
-    }
+  if (updatedBooking) {
+    if (req.body.status) updatedBooking.status = req.body.status;
+    if (req.body.finalAmountInr !== undefined) updatedBooking.finalAmountInr = Number(req.body.finalAmountInr);
+    if (req.body.paymentMethod) updatedBooking.paymentMethod = req.body.paymentMethod;
+    if (req.body.customerRating !== undefined) updatedBooking.customerRating = Number(req.body.customerRating);
   }
 
   if (pool) {
     try {
-      await pool.query(
+      const q = await pool.query(
         `UPDATE bookings SET
           status = COALESCE($1, status),
           final_amount_inr = COALESCE($2, final_amount_inr),
           payment_method = COALESCE($3, payment_method),
           customer_rating = COALESCE($4, customer_rating),
           updated_at = NOW()
-         WHERE id = $5`,
+         WHERE id = $5
+         RETURNING *`,
         [req.body.status || null, req.body.finalAmountInr ?? null, req.body.paymentMethod || null, req.body.customerRating ?? null, id]
       );
+      if (q.rows[0]) {
+        updatedBooking = mapDbBookingRow(q.rows[0]);
+      }
     } catch (_) {}
   }
 
-  res.json({ booking: b || { id, ...req.body } });
+  if (updatedBooking) {
+    if (req.body.status === 'confirmed') {
+      await createNotification({
+        userId: updatedBooking.customerId,
+        bookingId: updatedBooking.id,
+        title: 'Booking Confirmed!',
+        body: `${updatedBooking.workerNameEn} accepted ${updatedBooking.bookingDate}, ${updatedBooking.slotWindow}.`
+      });
+    } else if (req.body.status === 'in_progress') {
+      await createNotification({
+        userId: updatedBooking.customerId,
+        bookingId: updatedBooking.id,
+        title: 'Work Started',
+        body: `${updatedBooking.workerNameEn} has started your job.`
+      });
+    } else if (req.body.status === 'cancelled') {
+      await createNotification({
+        userId: updatedBooking.workerId,
+        bookingId: updatedBooking.id,
+        title: 'Booking Cancelled',
+        body: `${updatedBooking.customerName} cancelled ${updatedBooking.bookingDate}, ${updatedBooking.slotWindow}.`
+      });
+    } else if (req.body.status === 'completed') {
+      const amt = updatedBooking.finalAmountInr || updatedBooking.visitFeeInr || 0;
+      await createNotification({
+        userId: updatedBooking.customerId,
+        bookingId: updatedBooking.id,
+        title: 'Job Completed',
+        body: `Settled ₹${amt} via ${updatedBooking.paymentMethod || 'Cash'}.`
+      });
+      if (pool && updatedBooking.workerId && /^[0-9a-f-]{36}$/i.test(updatedBooking.workerId)) {
+        try {
+          await pool.query(
+            `UPDATE worker_profiles
+             SET jobs_completed = jobs_completed + 1,
+                 khata_today_inr = khata_today_inr + $1,
+                 khata_month_inr = khata_month_inr + $1,
+                 updated_at = NOW()
+             WHERE user_id = $2`,
+            [amt, updatedBooking.workerId]
+          );
+        } catch (_) {}
+      }
+    }
+  }
+
+  res.json({ booking: updatedBooking || { id, ...req.body } });
 });
 
 app.get('/api/v1/notifications', authenticateToken, async (req, res) => {

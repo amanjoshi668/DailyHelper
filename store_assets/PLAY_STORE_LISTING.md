@@ -25,6 +25,12 @@
 - **Data Sharing:** Contact details are shared strictly between the customer and confirmed professional for an active booking. Never sold to third parties.
 - **Security Practices:** Encrypted in transit (HTTPS/TLS); users can request account and data deletion.
 
+## Release Notes (`v1.1.0+2`)
+- Live multi-device Cloud Run synchronization for workers, bookings, status updates, and dismissible top notifications.
+- Added pull-to-refresh across Explore, Bookings, and Jobs, plus real Android Google Sign-In browser handoff.
+- Added Customer booking cancellation, Trusted Helpers bookmarking, Book Again shortcut, saved customer address persistence, and PIN-prioritized discovery.
+- Added Professional UPI ID & serviceable PIN code editing with an explicit Save Changes button in Rates & Khata.
+
 ## Release Notes (`v1.0.0+1`)
 - Initial release of DailyHelper for Customers and Professionals!
 - Direct hyperlocal booking by PIN code for Electricians, Plumbers, Carpenters, AC Repair, and Painters.

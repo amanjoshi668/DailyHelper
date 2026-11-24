@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/auth_service.dart';
+import '../services/gcp_backend_service.dart';
 import '../services/i18n.dart';
 import '../services/notification_service.dart';
 import '../services/vault_storage.dart';
@@ -223,6 +224,15 @@ class SettingsScreen extends StatelessWidget {
                         },
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Center(
+                  child: Text(
+                    'DailyHelper v${GcpBackendService.appVersion}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],

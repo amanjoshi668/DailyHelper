@@ -24,10 +24,12 @@ class VaultStorage extends ChangeNotifier {
 
   String _lang = 'en';
   String _pinCode = '560034';
+  String _savedAddress = '';
   bool _remindersEnabled = true;
   bool _defaultSeeded = false;
   bool _proStarterSeeded = false;
 
+  List<String> _savedWorkerIds = [];
   List<WorkerProfile> _workers = [];
   List<BookingRecord> _userBookings = [];
   List<AppNotificationItem> _notifications = [];
@@ -35,9 +37,13 @@ class VaultStorage extends ChangeNotifier {
   // Getters
   String get lang => _lang;
   String get pinCode => _pinCode;
+  String get savedAddress => _savedAddress;
   bool get remindersEnabled => _remindersEnabled;
+  List<String> get savedWorkerIds => List.unmodifiable(_savedWorkerIds);
   List<WorkerProfile> get workers => List.unmodifiable(_workers);
   List<BookingRecord> get bookings => List.unmodifiable(_userBookings);
+
+  bool isWorkerSaved(String workerId) => _savedWorkerIds.contains(workerId);
 
   AppNotificationItem? get activeTopNotification {
     if (!_remindersEnabled) return null;
@@ -70,9 +76,11 @@ class VaultStorage extends ChangeNotifier {
   void _clearInMemory() {
     _lang = 'en';
     _pinCode = '560034';
+    _savedAddress = '';
     _remindersEnabled = true;
     _defaultSeeded = false;
     _proStarterSeeded = false;
+    _savedWorkerIds = [];
     _workers = [];
     _userBookings = [];
     _notifications = [];
@@ -190,9 +198,11 @@ class VaultStorage extends ChangeNotifier {
   Map<String, dynamic> exportSnapshotMap() => {
         'lang': _lang,
         'pinCode': _pinCode,
+        'savedAddress': _savedAddress,
         'remindersEnabled': _remindersEnabled,
         'defaultSeeded': _defaultSeeded,
         'proStarterSeeded': _proStarterSeeded,
+        'savedWorkerIds': _savedWorkerIds,
         'bookings': _userBookings.map((b) => b.toMap()).toList(),
         'notifications': _notifications.map((n) => n.toMap()).toList(),
       };
@@ -200,9 +210,12 @@ class VaultStorage extends ChangeNotifier {
   void _hydrateFromMap(Map<String, dynamic> map) {
     _lang = (map['lang'] ?? 'en').toString();
     _pinCode = (map['pinCode'] ?? '560034').toString();
+    _savedAddress = (map['savedAddress'] ?? '').toString();
     _remindersEnabled = map['remindersEnabled'] != false;
     _defaultSeeded = map['defaultSeeded'] == true;
     _proStarterSeeded = map['proStarterSeeded'] == true;
+    _savedWorkerIds =
+        ((map['savedWorkerIds'] as List<dynamic>?) ?? const []).map((e) => e.toString()).toList();
 
     final bList = (map['bookings'] as List<dynamic>? ?? []);
     _userBookings = bList
@@ -359,7 +372,6 @@ class VaultStorage extends ChangeNotifier {
     }
 
     // Real-Calendar Resilience: auto-expire stale unanswered requests from past ISO dates
-    bool changed = false;
     final today = todayIso;
     for (int i = 0; i < _userBookings.length; i++) {
       final b = _userBookings[i];
@@ -367,17 +379,69 @@ class VaultStorage extends ChangeNotifier {
           RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(b.bookingDate) &&
           b.bookingDate.compareTo(today) < 0) {
         _userBookings[i] = b.copyWith(status: 'expired');
-        changed = true;
       }
     }
-    if (changed) {
-      await _persistToDisk();
-    } else {
-      await prefs.setString(_vaultKeyFor(user.id), jsonEncode(exportSnapshotMap()));
+
+    await prefs.setString(_vaultKeyFor(user.id), jsonEncode(exportSnapshotMap()));
+    notifyListeners();
+
+    // Live Cloud Run Sync (Workers, Bookings, Notifications, Vault)
+    refreshFromCloud();
+  }
+
+  Future<void> refreshFromCloud() async {
+    bool dirty = false;
+    final prefs = await SharedPreferences.getInstance();
+
+    // 1. Live workers list from Cloud Run (works even for visitors!)
+    final cloudWorkers = await GcpBackendService.instance.fetchWorkers();
+    if (cloudWorkers != null && cloudWorkers.isNotEmpty) {
+      final cloudIds = cloudWorkers.map((w) => w.id).toSet();
+      final merged = [
+        ...cloudWorkers,
+        ..._workers.where((w) => !cloudIds.contains(w.id)),
+      ];
+      _workers = merged;
+      await _saveSharedWorkers(prefs);
+      dirty = true;
     }
 
-    notifyListeners();
-    _pullCloudIfEmpty();
+    if (!_activeUser.isGuest && !_sessionToken.startsWith('local_')) {
+      // 2. Pull vault preferences if empty locally
+      if (_userBookings.isEmpty) {
+        final cloudSnap = await GcpBackendService.instance.fetchVaultSnapshot(_sessionToken);
+        if (cloudSnap != null && cloudSnap.isNotEmpty) {
+          _hydrateFromMap(cloudSnap);
+          dirty = true;
+        }
+      }
+
+      // 3. Pull live multi-device bookings from Cloud Run PostgreSQL
+      final cloudBookings = await GcpBackendService.instance.fetchBookings(_sessionToken);
+      if (cloudBookings != null) {
+        final cloudIds = cloudBookings.map((b) => b.id).toSet();
+        final localOnly = _userBookings.where((b) => !cloudIds.contains(b.id)).toList();
+        _userBookings = [...cloudBookings, ...localOnly];
+        dirty = true;
+      }
+
+      // 4. Pull live undismissed notifications from Cloud Run PostgreSQL
+      final cloudNotifs = await GcpBackendService.instance.fetchNotifications(_sessionToken);
+      if (cloudNotifs != null && cloudNotifs.isNotEmpty) {
+        final existingIds = _notifications.map((n) => n.id).toSet();
+        for (final cn in cloudNotifs.reversed) {
+          if (!existingIds.contains(cn.id)) {
+            _notifications.insert(0, cn);
+            dirty = true;
+          }
+        }
+      }
+    }
+
+    if (dirty) {
+      await _persistToDisk(syncCloud: false);
+      notifyListeners();
+    }
   }
 
   Future<void> upgradeOrLoadUser(
@@ -407,17 +471,6 @@ class VaultStorage extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _pullCloudIfEmpty() async {
-    if (_activeUser.isGuest || _sessionToken.startsWith('local_')) return;
-    if (_userBookings.isNotEmpty) return;
-    final cloud = await GcpBackendService.instance.fetchVaultSnapshot(_sessionToken);
-    if (cloud != null && cloud.isNotEmpty) {
-      _hydrateFromMap(cloud);
-      await _persistToDisk(syncCloud: false);
-      notifyListeners();
-    }
-  }
-
   Future<void> _persistToDisk({bool syncCloud = true}) async {
     final prefs = await SharedPreferences.getInstance();
     final snap = exportSnapshotMap();
@@ -438,6 +491,16 @@ class VaultStorage extends ChangeNotifier {
     final clean = newPin.trim();
     if (clean.length != 6) return;
     _pinCode = clean;
+    await _persistToDisk();
+    notifyListeners();
+  }
+
+  Future<void> toggleSavedWorker(String workerId) async {
+    if (_savedWorkerIds.contains(workerId)) {
+      _savedWorkerIds.remove(workerId);
+    } else {
+      _savedWorkerIds.add(workerId);
+    }
     await _persistToDisk();
     notifyListeners();
   }
@@ -473,10 +536,11 @@ class VaultStorage extends ChangeNotifier {
       _notifications[idx] = _notifications[idx].copyWith(isDismissed: true);
       await _persistToDisk();
       notifyListeners();
+      GcpBackendService.instance.dismissCloudNotification(_sessionToken, id);
     }
   }
 
-  // --- Customer Booking Creation & Rating ---
+  // --- Customer Booking Creation, Cancel & Rating ---
   Future<BookingRecord> createBooking({
     required WorkerProfile worker,
     required String dateStr,
@@ -484,6 +548,11 @@ class VaultStorage extends ChangeNotifier {
     required String issueNote,
     required String fullAddress,
   }) async {
+    final cleanAddress = fullAddress.trim();
+    if (cleanAddress.isNotEmpty) {
+      _savedAddress = cleanAddress;
+    }
+
     final booking = BookingRecord(
       id: 'BK-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
       customerId: _activeUser.id,
@@ -496,7 +565,7 @@ class VaultStorage extends ChangeNotifier {
       trade: worker.trade,
       pinCode: _pinCode,
       locality: 'PIN $_pinCode',
-      fullAddress: fullAddress.trim().isEmpty ? 'PIN $_pinCode' : fullAddress.trim(),
+      fullAddress: cleanAddress.isEmpty ? 'PIN $_pinCode' : cleanAddress,
       bookingDate: dateStr,
       slotWindow: slotWindow,
       issueNote: issueNote.trim().isEmpty ? 'General inspection & repair' : issueNote.trim(),
@@ -511,11 +580,33 @@ class VaultStorage extends ChangeNotifier {
     all.insert(0, booking);
     await _saveAllMarketplaceBookings(prefs, all);
 
+    GcpBackendService.instance.createCloudBooking(_sessionToken, booking);
+
     await pushTopNotification(
       title: 'Booking Requested',
       body: '${worker.localizedName(_lang)} · $dateStr, $slotWindow',
     );
     return booking;
+  }
+
+  Future<void> cancelBooking(String bookingId) async {
+    final idx = _userBookings.indexWhere((b) => b.id == bookingId);
+    if (idx < 0) return;
+    final updated = _userBookings[idx].copyWith(status: 'cancelled');
+    _userBookings[idx] = updated;
+
+    final prefs = await SharedPreferences.getInstance();
+    final all = await _loadAllMarketplaceBookings(prefs);
+    final mIdx = all.indexWhere((b) => b.id == bookingId);
+    if (mIdx >= 0) {
+      all[mIdx] = updated;
+      await _saveAllMarketplaceBookings(prefs, all);
+    }
+    GcpBackendService.instance.updateCloudBooking(_sessionToken, bookingId, status: 'cancelled');
+    await pushTopNotification(
+      title: 'Booking Cancelled',
+      body: '${updated.localizedWorkerName(_lang)} · ${updated.slotWindow}',
+    );
   }
 
   Future<void> rateCompletedBooking(String bookingId, int stars) async {
@@ -531,6 +622,8 @@ class VaultStorage extends ChangeNotifier {
       all[mIdx] = updated;
       await _saveAllMarketplaceBookings(prefs, all);
     }
+    GcpBackendService.instance
+        .updateCloudBooking(_sessionToken, bookingId, customerRating: stars);
     await _persistToDisk();
     notifyListeners();
   }
@@ -546,10 +639,13 @@ class VaultStorage extends ChangeNotifier {
     int? visitFeeInr,
     int? hourlyRateInr,
     String? upiId,
+    List<String>? servicePins,
     bool? isOnline,
     List<String>? blockedSlots,
+    bool showSavedNotif = false,
   }) async {
-    final targetId = _workers.any((w) => w.id == _activeUser.id) ? _activeUser.id : _workers.first.id;
+    final targetId =
+        _workers.any((w) => w.id == _activeUser.id) ? _activeUser.id : _workers.first.id;
     final idx = _workers.indexWhere((w) => w.id == targetId);
     if (idx < 0) return;
 
@@ -557,14 +653,33 @@ class VaultStorage extends ChangeNotifier {
       visitFeeInr: visitFeeInr,
       hourlyRateInr: hourlyRateInr,
       upiId: upiId,
+      servicePins: servicePins,
       isOnline: isOnline,
       blockedSlots: blockedSlots,
     );
 
     final prefs = await SharedPreferences.getInstance();
     await _saveSharedWorkers(prefs);
-    await _persistToDisk();
-    notifyListeners();
+
+    GcpBackendService.instance.updateMyWorkerProfile(
+      _sessionToken,
+      visitFeeInr: visitFeeInr,
+      hourlyRateInr: hourlyRateInr,
+      upiId: upiId,
+      servicePins: servicePins,
+      isOnline: isOnline,
+      blockedSlots: blockedSlots,
+    );
+
+    if (showSavedNotif) {
+      await pushTopNotification(
+        title: 'Rate Card Updated',
+        body: 'Visit ₹${_workers[idx].visitFeeInr} · Hourly ₹${_workers[idx].hourlyRateInr}/hr',
+      );
+    } else {
+      await _persistToDisk();
+      notifyListeners();
+    }
   }
 
   Future<void> updateJobStatus(
@@ -590,6 +705,14 @@ class VaultStorage extends ChangeNotifier {
       all[mIdx] = updated;
       await _saveAllMarketplaceBookings(prefs, all);
     }
+
+    GcpBackendService.instance.updateCloudBooking(
+      _sessionToken,
+      bookingId,
+      status: newStatus,
+      finalAmountInr: finalAmountInr,
+      paymentMethod: paymentMethod,
+    );
 
     if (newStatus == 'confirmed') {
       if (_remindersEnabled) {
