@@ -19,7 +19,7 @@ class GcpBackendService {
     'DAILYHELPER_API_URL',
     defaultValue: 'https://dailyhelper-backend-676039463235.us-central1.run.app',
   );
-  static const String appVersion = '1.2.0';
+  static const String appVersion = '1.2.1';
   static const String _localBugsKey = 'dailyhelper_bug_reports_v1';
 
   http.Client httpClient = http.Client();
@@ -305,6 +305,16 @@ class GcpBackendService {
     try {
       await httpClient.patch(
         Uri.parse('$baseUrl/api/v1/notifications/$id/dismiss'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 3));
+    } catch (_) {}
+  }
+
+  Future<void> dismissAllCloudNotifications(String token) async {
+    if (token.startsWith('local_')) return;
+    try {
+      await httpClient.post(
+        Uri.parse('$baseUrl/api/v1/notifications/dismiss-all'),
         headers: {'Authorization': 'Bearer $token'},
       ).timeout(const Duration(seconds: 3));
     } catch (_) {}

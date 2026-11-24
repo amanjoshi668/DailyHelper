@@ -25,6 +25,11 @@
 - **Data Sharing:** Contact details are shared strictly between the customer and confirmed professional for an active booking. Never sold to third parties.
 - **Security Practices:** Encrypted in transit (HTTPS/TLS); users can request account and data deletion.
 
+## Release Notes (`v1.2.1+4`)
+- Fixed Android notification delivery: upgraded booking alerts to a high-priority notification channel with a monochrome status-bar icon (`ic_stat_dailyhelper`), real 60-minute-before-slot `AlarmManager` scheduling/cancellation, and live OS alerts for incoming bookings & status changes.
+- Fixed Settings Notifications toggle sync with Android `POST_NOTIFICATIONS` permission state, added **Send Test Notification** and 1-tap **Open System Notification Settings** fallback, and removed role-mismatched reminder copy.
+- Fixed in-app top notification banners so they never cover top inputs, appear across Home, Settings, and Bug Report screens, show queued counts with **Clear all**, and poll live cross-device alerts every 20 seconds while active.
+
 ## Release Notes (`v1.2.0+3`)
 - Added **Language Preference** picker in Settings supporting 6 Indian languages: English, Hindi (`हिंदी`), Marathi (`मराठी`), Tamil (`தமிழ்`), Telugu (`తెలుగు`), and Kannada (`ಕನ್ನಡ`) with persistent cross-session sync.
 - Expanded **Worker Rate Card Editor** in Rates & Khata so professionals can customize their Visit Fee, Hourly Rate, Full-Day Rate, and add/remove custom per-service task rates synced live to customer profiles.

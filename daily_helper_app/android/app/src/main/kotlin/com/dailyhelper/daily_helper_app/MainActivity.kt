@@ -4,8 +4,11 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -26,12 +29,17 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        ReminderScheduler.ensureChannel(this)
+        ReminderScheduler.ensureChannels(this)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call: MethodCall, result: MethodChannel.Result ->
                 when (call.method) {
                     "configureReminders" -> handleConfigureReminders(call, result)
+                    "showNotification" -> handleShowNotification(call, result)
+                    "scheduleAppointmentReminder" -> handleScheduleAppointmentReminder(call, result)
+                    "cancelAppointmentReminder" -> handleCancelAppointmentReminder(call, result)
+                    "getNotificationStatus" -> handleGetNotificationStatus(result)
+                    "openNotificationSettings" -> handleOpenNotificationSettings(result)
                     "saveExportDocument" -> handleSaveExportDocument(call, result)
                     else -> result.notImplemented()
                 }
@@ -44,6 +52,7 @@ class MainActivity : FlutterActivity() {
         val amMinute = call.argument<Int>("amMinute") ?: 30
         val pmHour = call.argument<Int>("pmHour") ?: 17
         val pmMinute = call.argument<Int>("pmMinute") ?: 30
+        val isProfessional = call.argument<Boolean>("isProfessional") ?: false
 
         if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
@@ -52,13 +61,15 @@ class MainActivity : FlutterActivity() {
             ) == PackageManager.PERMISSION_GRANTED
 
             if (!granted) {
+                pendingNotifResult?.success(false)
                 pendingNotifResult = result
                 pendingReminderArgs = mapOf(
                     "enabled" to enabled,
                     "amHour" to amHour,
                     "amMinute" to amMinute,
                     "pmHour" to pmHour,
-                    "pmMinute" to pmMinute
+                    "pmMinute" to pmMinute,
+                    "isProfessional" to isProfessional
                 )
                 ActivityCompat.requestPermissions(
                     this,
@@ -69,8 +80,89 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        ReminderScheduler.saveAndApply(this, enabled, amHour, amMinute, pmHour, pmMinute)
+        if (enabled && !NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            ReminderScheduler.saveAndApply(this, false, amHour, amMinute, pmHour, pmMinute, isProfessional)
+            result.success(false)
+            return
+        }
+
+        ReminderScheduler.saveAndApply(this, enabled, amHour, amMinute, pmHour, pmMinute, isProfessional)
         result.success(enabled)
+    }
+
+    private fun handleShowNotification(call: MethodCall, result: MethodChannel.Result) {
+        val id = call.argument<Int>("id") ?: (System.currentTimeMillis() % 100000).toInt()
+        val title = call.argument<String>("title") ?: "DailyHelper"
+        val body = call.argument<String>("body") ?: ""
+        val highPriority = call.argument<Boolean>("highPriority") ?: true
+
+        val shown = ReminderScheduler.showInstantNotification(
+            context = this,
+            notifId = id,
+            title = title,
+            body = body,
+            highPriority = highPriority
+        )
+        result.success(shown)
+    }
+
+    private fun handleScheduleAppointmentReminder(call: MethodCall, result: MethodChannel.Result) {
+        val bookingId = call.argument<String>("bookingId") ?: ""
+        val triggerAtMillis = (call.argument<Number>("triggerAtMillis"))?.toLong() ?: 0L
+        val title = call.argument<String>("title") ?: "Upcoming Appointment"
+        val body = call.argument<String>("body") ?: "Your DailyHelper appointment starts in 60 minutes."
+        val ok = ReminderScheduler.scheduleAppointmentReminder(
+            context = this,
+            bookingId = bookingId,
+            triggerAtMillis = triggerAtMillis,
+            title = title,
+            body = body
+        )
+        result.success(ok)
+    }
+
+    private fun handleCancelAppointmentReminder(call: MethodCall, result: MethodChannel.Result) {
+        val bookingId = call.argument<String>("bookingId") ?: ""
+        ReminderScheduler.cancelAppointmentReminder(this, bookingId)
+        result.success(true)
+    }
+
+    private fun handleGetNotificationStatus(result: MethodChannel.Result) {
+        val permissionGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+        val systemEnabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
+        val remindersScheduled = ReminderScheduler.isRemindersEnabled(this)
+        result.success(
+            mapOf(
+                "permissionGranted" to permissionGranted,
+                "systemEnabled" to systemEnabled,
+                "remindersScheduled" to remindersScheduled
+            )
+        )
+    }
+
+    private fun handleOpenNotificationSettings(result: MethodChannel.Result) {
+        try {
+            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                }
+            } else {
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+            }
+            startActivity(intent)
+            result.success(true)
+        } catch (_: Exception) {
+            result.success(false)
+        }
     }
 
     private fun handleSaveExportDocument(call: MethodCall, result: MethodChannel.Result) {
@@ -120,18 +212,20 @@ class MainActivity : FlutterActivity() {
             pendingReminderArgs = null
 
             val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
-            if (granted && args != null) {
+            val isPro = (args?.get("isProfessional") as? Boolean) ?: false
+            if (granted && args != null && NotificationManagerCompat.from(this).areNotificationsEnabled()) {
                 ReminderScheduler.saveAndApply(
                     this,
                     true,
                     (args["amHour"] as? Int) ?: 8,
                     (args["amMinute"] as? Int) ?: 30,
                     (args["pmHour"] as? Int) ?: 17,
-                    (args["pmMinute"] as? Int) ?: 30
+                    (args["pmMinute"] as? Int) ?: 30,
+                    isPro
                 )
                 res?.success(true)
             } else {
-                ReminderScheduler.saveAndApply(this, false, 8, 30, 17, 30)
+                ReminderScheduler.saveAndApply(this, false, 8, 30, 17, 30, isPro)
                 res?.success(false)
             }
         }

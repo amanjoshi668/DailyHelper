@@ -10,6 +10,7 @@ import 'package:daily_helper_app/models/models.dart';
 import 'package:daily_helper_app/services/auth_service.dart';
 import 'package:daily_helper_app/services/gcp_backend_service.dart';
 import 'package:daily_helper_app/services/notification_service.dart';
+import 'package:daily_helper_app/services/vault_storage.dart';
 
 class _FakeBackendClient extends http.BaseClient {
   final List<Map<String, dynamic>> serverBugs = [];
@@ -488,6 +489,89 @@ void main() {
     expect(find.text('Inverter Setup'), findsOneWidget);
     expect(find.text('₹350'), findsOneWidget);
     expect(find.textContaining('₹1050'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'CUJ 9: Notifications — 60m Slot Parser, Test Alert on Settings, Permission Denied Sync & Clear All',
+      (WidgetTester tester) async {
+    setMobileViewport(tester);
+
+    // 1. Deterministic 60-min reminder timestamp parser checks
+    final fixedNow = DateTime(2026, 11, 25, 8, 30);
+    expect(
+      NotificationService.compute60MinReminderTime('2026-11-25', '11:00 - 01:00 PM',
+          nowOverride: fixedNow),
+      DateTime(2026, 11, 25, 10, 0),
+    );
+    expect(
+      NotificationService.compute60MinReminderTime('2026-11-25', '02:00 - 04:00 PM',
+          nowOverride: fixedNow),
+      DateTime(2026, 11, 25, 13, 0),
+    );
+    expect(
+      NotificationService.compute60MinReminderTime('2026-11-25', '09:00 - 11:00 AM',
+          nowOverride: fixedNow),
+      DateTime(2026, 11, 25, 8, 31),
+    );
+    expect(
+      NotificationService.compute60MinReminderTime('2026-11-24', '09:00 - 11:00 AM',
+          nowOverride: fixedNow),
+      isNull,
+    );
+
+    // 2. Test Notification in Settings fires native OS showNotification & displays top banner immediately
+    await tester.pumpWidget(const DailyHelperApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('header_user_icon_btn')));
+    await tester.pumpAndSettle();
+
+    final testNotifTile = find.byKey(const Key('settings_test_notif_tile'));
+    await tester.ensureVisible(testNotifTile);
+    await tester.pumpAndSettle();
+    await tester.tap(testNotifTile);
+    await tester.pumpAndSettle();
+
+    expect(nativeCalls.any((c) => c.method == 'showNotification'), isTrue);
+    expect(find.text('DailyHelper Alerts Ready'), findsOneWidget);
+
+    // 3. Push a 2nd notification -> verify "+1" queued badge & "Clear all" clears every alert
+    await VaultStorage.instance.pushTopNotification(
+      title: 'Second Alert',
+      body: 'Follow-up update for verification.',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('+1'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('dismiss_all_notifications_btn')));
+    await tester.pumpAndSettle();
+    expect(find.text('Second Alert'), findsNothing);
+    expect(find.text('DailyHelper Alerts Ready'), findsNothing);
+
+    // 4. Simulate Android denying POST_NOTIFICATIONS -> switch stays OFF & reveals Open System Settings
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(NotificationService.channel, (MethodCall call) async {
+      nativeCalls.add(call);
+      if (call.method == 'configureReminders') return false;
+      if (call.method == 'getNotificationStatus') {
+        return {
+          'permissionGranted': false,
+          'systemEnabled': false,
+          'remindersScheduled': false,
+        };
+      }
+      return true;
+    });
+
+    await VaultStorage.instance.setRemindersEnabled(true);
+    await tester.pumpAndSettle();
+
+    expect(VaultStorage.instance.remindersEnabled, isFalse);
+    expect(VaultStorage.instance.osNotificationBlocked, isTrue);
+    expect(find.byKey(const Key('settings_open_os_notif_tile')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('settings_open_os_notif_tile')));
+    await tester.pumpAndSettle();
+    expect(nativeCalls.any((c) => c.method == 'openNotificationSettings'), isTrue);
     expect(tester.takeException(), isNull);
   });
 }

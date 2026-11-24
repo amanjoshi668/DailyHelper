@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/models.dart';
@@ -35,6 +36,7 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
   final _upiIdCtrl = TextEditingController();
   final _servicePinsCtrl = TextEditingController();
   String? _syncedProId;
+  Timer? _pollTimer;
 
   static const List<String> _tradeFilterIds = [
     'all',
@@ -45,21 +47,36 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
     'painter',
   ];
 
+  void _startForegroundPoll() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (AuthService.instance.isLoggedIn) {
+        VaultStorage.instance.refreshFromCloud();
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _startForegroundPoll();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      VaultStorage.instance.syncNotificationStatus();
       VaultStorage.instance.refreshFromCloud();
+      _startForegroundPoll();
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _pollTimer?.cancel();
     }
   }
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _searchCtrl.dispose();
     _visitFeeCtrl.dispose();
@@ -1345,19 +1362,20 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
                   ),
                 ],
               ),
-              body: Stack(
+              body: Column(
                 children: [
-                  Positioned.fill(child: mainBody),
                   if (topNotif != null)
-                    Positioned(
-                      top: 10,
-                      left: 12,
-                      right: 12,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                       child: TopNotificationBanner(
                         notification: topNotif,
+                        queuedCount: vault.unreadNotificationCount,
+                        clearAllLabel: AppStrings.tr(lang, 'clearAll'),
                         onDismiss: () => vault.dismissTopNotification(topNotif.id),
+                        onDismissAll: () => vault.dismissAllTopNotifications(),
                       ),
                     ),
+                  Expanded(child: mainBody),
                 ],
               ),
               bottomNavigationBar: isSplitView

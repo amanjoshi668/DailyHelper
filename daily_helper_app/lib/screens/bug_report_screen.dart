@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/gcp_backend_service.dart';
 import '../services/i18n.dart';
 import '../services/vault_storage.dart';
+import '../widgets/top_notification_banner.dart';
 
 class BugReportScreen extends StatefulWidget {
   final String pageContext;
@@ -69,18 +70,37 @@ class _BugReportScreenState extends State<BugReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final lang = VaultStorage.instance.lang;
-    final theme = Theme.of(context);
+    return ListenableBuilder(
+      listenable: VaultStorage.instance,
+      builder: (context, _) {
+        final vault = VaultStorage.instance;
+        final lang = vault.lang;
+        final theme = Theme.of(context);
+        final topNotif = vault.activeTopNotification;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(AppStrings.tr(lang, 'reportBug')),
-        centerTitle: false,
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(AppStrings.tr(lang, 'reportBug')),
+            centerTitle: false,
+          ),
+          body: SafeArea(
+            child: Column(
+              children: [
+                if (topNotif != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                    child: TopNotificationBanner(
+                      notification: topNotif,
+                      queuedCount: vault.unreadNotificationCount,
+                      clearAllLabel: AppStrings.tr(lang, 'clearAll'),
+                      onDismiss: () => vault.dismissTopNotification(topNotif.id),
+                      onDismissAll: () => vault.dismissAllTopNotifications(),
+                    ),
+                  ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -191,6 +211,11 @@ class _BugReportScreenState extends State<BugReportScreen> {
           ],
         ),
       ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

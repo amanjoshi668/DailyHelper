@@ -27,6 +27,7 @@ class VaultStorage extends ChangeNotifier {
   String _pinCode = '560034';
   String _savedAddress = '';
   bool _remindersEnabled = true;
+  bool _osNotificationBlocked = false;
   bool _defaultSeeded = false;
   bool _proStarterSeeded = false;
 
@@ -40,14 +41,19 @@ class VaultStorage extends ChangeNotifier {
   String get pinCode => _pinCode;
   String get savedAddress => _savedAddress;
   bool get remindersEnabled => _remindersEnabled;
+  bool get osNotificationBlocked => _osNotificationBlocked;
   List<String> get savedWorkerIds => List.unmodifiable(_savedWorkerIds);
   List<WorkerProfile> get workers => List.unmodifiable(_workers);
   List<BookingRecord> get bookings => List.unmodifiable(_userBookings);
 
   bool isWorkerSaved(String workerId) => _savedWorkerIds.contains(workerId);
 
+  List<AppNotificationItem> get unreadNotifications =>
+      _notifications.where((n) => !n.isDismissed).toList(growable: false);
+
+  int get unreadNotificationCount => unreadNotifications.length;
+
   AppNotificationItem? get activeTopNotification {
-    if (!_remindersEnabled) return null;
     for (final n in _notifications) {
       if (!n.isDismissed) return n;
     }
@@ -79,6 +85,7 @@ class VaultStorage extends ChangeNotifier {
     _pinCode = '560034';
     _savedAddress = '';
     _remindersEnabled = true;
+    _osNotificationBlocked = false;
     _defaultSeeded = false;
     _proStarterSeeded = false;
     _savedWorkerIds = [];
@@ -416,8 +423,66 @@ class VaultStorage extends ChangeNotifier {
     await prefs.setString(_vaultKeyFor(user.id), jsonEncode(exportSnapshotMap()));
     notifyListeners();
 
+    // Sync real OS notification permission state & schedule alarms cleanly
+    syncNotificationStatus();
+
     // Live Cloud Run Sync (Workers, Bookings, Notifications, Vault)
     refreshFromCloud();
+  }
+
+  Future<void> syncNotificationStatus({bool ensureScheduledIfAllowed = false}) async {
+    final status = await NotificationService.instance.getNotificationStatus();
+    final blocked = !status.isAllowed;
+    bool changed = false;
+
+    if (_osNotificationBlocked != blocked) {
+      _osNotificationBlocked = blocked;
+      changed = true;
+    }
+    if (blocked && _remindersEnabled) {
+      _remindersEnabled = false;
+      changed = true;
+    } else if (!blocked && _remindersEnabled && (!status.remindersScheduled || ensureScheduledIfAllowed)) {
+      await NotificationService.instance.configureReminders(
+        enabled: true,
+        isProfessional: _activeUser.role == UserRole.professional,
+      );
+      await _scheduleUpcomingConfirmedReminders();
+    }
+
+    if (changed) {
+      await _persistToDisk(syncCloud: false);
+      notifyListeners();
+    }
+  }
+
+  Future<void> _scheduleReminderForBooking(BookingRecord b) async {
+    if (!_remindersEnabled || _osNotificationBlocked) return;
+    final triggerAt = NotificationService.compute60MinReminderTime(
+      b.bookingDate,
+      b.slotWindow,
+    );
+    if (triggerAt == null) return;
+    final isPro = _activeUser.role == UserRole.professional;
+    final title = isPro ? 'Upcoming Job in 60 mins' : 'Helper Arriving Soon (60m)';
+    final body = isPro
+        ? '${b.customerName} · ${b.slotWindow} (${b.fullAddress})'
+        : '${b.localizedWorkerName(_lang)} · ${b.slotWindow} (PIN ${b.pinCode})';
+    await NotificationService.instance.scheduleAppointmentReminder(
+      bookingId: b.id,
+      triggerAt: triggerAt,
+      title: title,
+      body: body,
+    );
+  }
+
+  Future<void> _scheduleUpcomingConfirmedReminders() async {
+    if (!_remindersEnabled || _osNotificationBlocked) return;
+    for (final b in _userBookings) {
+      if (b.status == 'confirmed') {
+        await _scheduleReminderForBooking(b);
+      }
+    }
   }
 
   Future<void> refreshFromCloud() async {
@@ -450,20 +515,50 @@ class VaultStorage extends ChangeNotifier {
       // 3. Pull live multi-device bookings from Cloud Run PostgreSQL
       final cloudBookings = await GcpBackendService.instance.fetchBookings(_sessionToken);
       if (cloudBookings != null) {
+        final prevStatusById = {for (final b in _userBookings) b.id: b.status};
         final cloudIds = cloudBookings.map((b) => b.id).toSet();
         final localOnly = _userBookings.where((b) => !cloudIds.contains(b.id)).toList();
         _userBookings = [...cloudBookings, ...localOnly];
         dirty = true;
+
+        // Schedule 60m reminders for newly confirmed bookings & cancel for closed ones
+        for (final cb in cloudBookings) {
+          if (cb.status == 'confirmed' && prevStatusById[cb.id] != 'confirmed') {
+            await _scheduleReminderForBooking(cb);
+          } else if (cb.status == 'cancelled' || cb.status == 'declined' || cb.status == 'completed') {
+            await NotificationService.instance.cancelAppointmentReminder(cb.id);
+          }
+        }
       }
 
-      // 4. Pull live undismissed notifications from Cloud Run PostgreSQL
+      // 4. Pull live undismissed notifications from Cloud Run PostgreSQL & deliver OS alerts
       final cloudNotifs = await GcpBackendService.instance.fetchNotifications(_sessionToken);
-      if (cloudNotifs != null && cloudNotifs.isNotEmpty) {
+      if (cloudNotifs != null) {
+        final cloudIds = cloudNotifs.map((n) => n.id).toSet();
+        // Reconcile server-originated alerts dismissed on another device
+        for (int i = 0; i < _notifications.length; i++) {
+          final existing = _notifications[i];
+          if (!existing.isDismissed &&
+              !existing.id.startsWith('notif_') &&
+              !cloudIds.contains(existing.id)) {
+            _notifications[i] = existing.copyWith(isDismissed: true);
+            dirty = true;
+          }
+        }
+
         final existingIds = _notifications.map((n) => n.id).toSet();
         for (final cn in cloudNotifs.reversed) {
           if (!existingIds.contains(cn.id)) {
             _notifications.insert(0, cn);
             dirty = true;
+            if (_remindersEnabled && !_osNotificationBlocked) {
+              await NotificationService.instance.showNotification(
+                id: 7200 + (cn.id.hashCode.abs() % 1000),
+                title: cn.title,
+                body: cn.body,
+                highPriority: true,
+              );
+            }
           }
         }
       }
@@ -543,27 +638,71 @@ class VaultStorage extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setRemindersEnabled(bool enabled) async {
-    _remindersEnabled = enabled;
-    await NotificationService.instance.configureReminders(enabled: enabled);
+  Future<bool> setRemindersEnabled(bool enabled) async {
+    final applied = await NotificationService.instance.configureReminders(
+      enabled: enabled,
+      isProfessional: _activeUser.role == UserRole.professional,
+    );
+    if (enabled) {
+      _remindersEnabled = applied;
+      _osNotificationBlocked = !applied;
+      if (applied) {
+        await _scheduleUpcomingConfirmedReminders();
+      }
+    } else {
+      _remindersEnabled = false;
+      _osNotificationBlocked = false;
+    }
     await _persistToDisk();
     notifyListeners();
+    return _remindersEnabled;
+  }
+
+  Future<bool> sendTestNotification() async {
+    final enabled = await setRemindersEnabled(true);
+    if (!enabled) {
+      await pushTopNotification(
+        title: 'Notifications Blocked',
+        body: 'Allow DailyHelper notifications in Android Settings to receive booking alerts.',
+      );
+      return false;
+    }
+    const title = 'DailyHelper Alerts Ready';
+    const body = 'Booking updates and 60-minute appointment reminders are active.';
+    await NotificationService.instance.showNotification(
+      id: 7999,
+      title: title,
+      body: body,
+      highPriority: true,
+    );
+    await pushTopNotification(title: title, body: body);
+    return true;
   }
 
   Future<void> pushTopNotification({
     required String title,
     required String body,
+    bool alsoShowOsNotification = false,
   }) async {
+    final id = 'notif_${DateTime.now().microsecondsSinceEpoch}';
     _notifications.insert(
       0,
       AppNotificationItem(
-        id: 'notif_${DateTime.now().microsecondsSinceEpoch}',
+        id: id,
         title: title,
         body: body,
         isDismissed: false,
         createdAt: DateTime.now().toIso8601String(),
       ),
     );
+    if (alsoShowOsNotification && _remindersEnabled && !_osNotificationBlocked) {
+      await NotificationService.instance.showNotification(
+        id: 7300 + (id.hashCode.abs() % 1000),
+        title: title,
+        body: body,
+        highPriority: true,
+      );
+    }
     await _persistToDisk();
     notifyListeners();
   }
@@ -574,8 +713,23 @@ class VaultStorage extends ChangeNotifier {
       _notifications[idx] = _notifications[idx].copyWith(isDismissed: true);
       await _persistToDisk();
       notifyListeners();
-      GcpBackendService.instance.dismissCloudNotification(_sessionToken, id);
+      await GcpBackendService.instance.dismissCloudNotification(_sessionToken, id);
     }
+  }
+
+  Future<void> dismissAllTopNotifications() async {
+    bool changed = false;
+    for (int i = 0; i < _notifications.length; i++) {
+      if (!_notifications[i].isDismissed) {
+        _notifications[i] = _notifications[i].copyWith(isDismissed: true);
+        changed = true;
+      }
+    }
+    if (changed) {
+      await _persistToDisk();
+      notifyListeners();
+    }
+    await GcpBackendService.instance.dismissAllCloudNotifications(_sessionToken);
   }
 
   // --- Customer Booking Creation, Cancel & Rating ---
@@ -592,7 +746,7 @@ class VaultStorage extends ChangeNotifier {
     }
 
     final booking = BookingRecord(
-      id: 'BK-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
+      id: 'BK-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
       customerId: _activeUser.id,
       customerName: _activeUser.name,
       customerPhone: _activeUser.phone.isEmpty ? '+91 98450 11223' : _activeUser.phone,
@@ -618,11 +772,19 @@ class VaultStorage extends ChangeNotifier {
     all.insert(0, booking);
     await _saveAllMarketplaceBookings(prefs, all);
 
-    GcpBackendService.instance.createCloudBooking(_sessionToken, booking);
+    await GcpBackendService.instance.createCloudBooking(_sessionToken, booking);
+
+    if (_remindersEnabled) {
+      await NotificationService.instance.configureReminders(
+        enabled: true,
+        isProfessional: false,
+      );
+    }
 
     await pushTopNotification(
       title: 'Booking Requested',
       body: '${worker.localizedName(_lang)} · $dateStr, $slotWindow',
+      alsoShowOsNotification: true,
     );
     return booking;
   }
@@ -640,7 +802,8 @@ class VaultStorage extends ChangeNotifier {
       all[mIdx] = updated;
       await _saveAllMarketplaceBookings(prefs, all);
     }
-    GcpBackendService.instance.updateCloudBooking(_sessionToken, bookingId, status: 'cancelled');
+    await NotificationService.instance.cancelAppointmentReminder(bookingId);
+    await GcpBackendService.instance.updateCloudBooking(_sessionToken, bookingId, status: 'cancelled');
     await pushTopNotification(
       title: 'Booking Cancelled',
       body: '${updated.localizedWorkerName(_lang)} · ${updated.slotWindow}',
@@ -767,7 +930,7 @@ class VaultStorage extends ChangeNotifier {
       await _saveAllMarketplaceBookings(prefs, all);
     }
 
-    GcpBackendService.instance.updateCloudBooking(
+    await GcpBackendService.instance.updateCloudBooking(
       _sessionToken,
       bookingId,
       status: newStatus,
@@ -777,13 +940,28 @@ class VaultStorage extends ChangeNotifier {
 
     if (newStatus == 'confirmed') {
       if (_remindersEnabled) {
-        await NotificationService.instance.configureReminders(enabled: true);
+        final ok = await NotificationService.instance.configureReminders(
+          enabled: true,
+          isProfessional: true,
+        );
+        _osNotificationBlocked = !ok;
+        if (ok) {
+          await _scheduleReminderForBooking(updated);
+        }
       }
       await pushTopNotification(
         title: 'Slot Confirmed',
         body: 'Address unlocked: ${updated.fullAddress} · 60m reminder set.',
+        alsoShowOsNotification: true,
+      );
+    } else if (newStatus == 'declined') {
+      await NotificationService.instance.cancelAppointmentReminder(bookingId);
+      await pushTopNotification(
+        title: 'Request Declined',
+        body: '${updated.customerName} · ${updated.slotWindow}',
       );
     } else if (newStatus == 'completed') {
+      await NotificationService.instance.cancelAppointmentReminder(bookingId);
       final amt = finalAmountInr ?? updated.visitFeeInr;
       final pIdx = _workers.indexWhere((w) => w.id == _activeUser.id);
       if (pIdx >= 0) {
@@ -798,6 +976,7 @@ class VaultStorage extends ChangeNotifier {
       await pushTopNotification(
         title: 'Payment Logged to Khata',
         body: '₹$amt received via ${paymentMethod ?? 'Cash'} (0% commission).',
+        alsoShowOsNotification: true,
       );
     } else {
       await _persistToDisk();

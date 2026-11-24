@@ -1,15 +1,8 @@
 package com.dailyhelper.daily_helper_app
 
-import android.Manifest
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
@@ -20,46 +13,56 @@ class ReminderReceiver : BroadcastReceiver() {
             return
         }
 
+        if (action == ReminderScheduler.ACTION_APPOINTMENT) {
+            val bookingId = intent.getStringExtra(ReminderScheduler.EXTRA_BOOKING_ID) ?: ""
+            val title = intent.getStringExtra(ReminderScheduler.EXTRA_TITLE)
+                ?: "Upcoming DailyHelper Appointment"
+            val body = intent.getStringExtra(ReminderScheduler.EXTRA_BODY)
+                ?: "Your confirmed appointment starts in 60 minutes."
+            ReminderScheduler.removeFiredAppointment(context, bookingId)
+            val notifId = 7100 + ((bookingId.hashCode() and 0x7FFFFFFF) % 1000)
+            ReminderScheduler.showInstantNotification(
+                context = context,
+                notifId = notifId,
+                title = title,
+                body = body,
+                highPriority = true
+            )
+            return
+        }
+
         if (action == ReminderScheduler.ACTION_AM || action == ReminderScheduler.ACTION_PM) {
             ReminderScheduler.scheduleNextOccurrence(context, action)
-            ReminderScheduler.ensureChannel(context)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val granted = ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED
-                if (!granted) return
-            }
-
-            val openIntent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val contentPending = PendingIntent.getActivity(
-                context,
-                6100,
-                openIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
             val isMorning = action == ReminderScheduler.ACTION_AM
-            val title = if (isMorning) "DailyHelper — Today's Schedule" else "DailyHelper — Upcoming Bookings"
-            val body = if (isMorning) {
-                "Check your confirmed appointments and availability for today."
+            val isPro = ReminderScheduler.isProfessionalMode(context)
+
+            val title = if (isMorning) {
+                if (isPro) "DailyHelper — Today's Jobs" else "DailyHelper — Today's Bookings"
             } else {
-                "Review upcoming service slots or update your Khata."
+                if (isPro) "DailyHelper — Evening Schedule" else "DailyHelper — Upcoming Appointments"
             }
 
-            val notification = NotificationCompat.Builder(context, ReminderScheduler.CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle(title)
-                .setContentText(body)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setAutoCancel(true)
-                .setContentIntent(contentPending)
-                .build()
+            val body = if (isMorning) {
+                if (isPro) {
+                    "Check new job requests and confirm your availability for today."
+                } else {
+                    "Review your confirmed home service appointments for today."
+                }
+            } else {
+                if (isPro) {
+                    "Review tomorrow's booked slots and keep your rate card up to date."
+                } else {
+                    "Check upcoming service slots or book a trusted local helper."
+                }
+            }
 
-            NotificationManagerCompat.from(context).notify(if (isMorning) 7001 else 7002, notification)
+            ReminderScheduler.showInstantNotification(
+                context = context,
+                notifId = if (isMorning) 7001 else 7002,
+                title = title,
+                body = body,
+                highPriority = false
+            )
         }
     }
 }

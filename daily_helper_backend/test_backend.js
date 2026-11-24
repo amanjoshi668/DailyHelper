@@ -107,6 +107,29 @@ async function run() {
     const dismissRes = await reqJson(port, 'PATCH', `/api/v1/notifications/${custNotifs.body.notifications[0].id}/dismiss`, {}, custToken);
     assert.strictEqual(dismissRes.status, 200);
 
+    // 4b. Declined booking notification + dismiss-all (v1.2.1)
+    const bk2 = await reqJson(port, 'POST', '/api/v1/bookings', {
+      workerId: proId,
+      workerName: 'Ramesh Electric',
+      trade: 'electrician',
+      pinCode: '560034',
+      fullAddress: 'Flat 402, Palm Grove',
+      bookingDate: 'Tomorrow',
+      slotWindow: '04:00 - 06:00 PM',
+      issueNote: 'Fan noise',
+      visitFeeInr: 149
+    }, custToken);
+    assert.strictEqual(bk2.status, 201);
+    const declineRes = await reqJson(port, 'PATCH', `/api/v1/bookings/${bk2.body.booking.id}`, { status: 'declined' }, proToken);
+    assert.strictEqual(declineRes.status, 200);
+    const custDeclineNotifs = await reqJson(port, 'GET', '/api/v1/notifications', null, custToken);
+    assert(custDeclineNotifs.body.notifications.some(n => n.title.includes('Declined')));
+
+    const dismissAllRes = await reqJson(port, 'POST', '/api/v1/notifications/dismiss-all', {}, custToken);
+    assert.strictEqual(dismissAllRes.status, 200);
+    const custAfterDismissAll = await reqJson(port, 'GET', '/api/v1/notifications', null, custToken);
+    assert.strictEqual(custAfterDismissAll.body.notifications.length, 0);
+
     // 5. Bug Triage open -> resolve pruning
     const postBug = await reqJson(port, 'POST', '/api/v1/bugs', {
       userEmail: 'priya@test.local',

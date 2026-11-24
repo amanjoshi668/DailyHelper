@@ -274,7 +274,7 @@ app.get('/health', async (_req, res) => {
   res.json({
     status: 'ok',
     service: 'dailyhelper-backend',
-    version: '1.2.0',
+    version: '1.2.1',
     database,
     dbMode: database,
     googleAuthEnabled: Boolean(GOOGLE_CLIENT_ID),
@@ -873,6 +873,13 @@ app.patch('/api/v1/bookings/:id', authenticateToken, async (req, res) => {
         title: 'Work Started',
         body: `${updatedBooking.workerNameEn} has started your job.`
       });
+    } else if (req.body.status === 'declined') {
+      await createNotification({
+        userId: updatedBooking.customerId,
+        bookingId: updatedBooking.id,
+        title: 'Booking Declined',
+        body: `${updatedBooking.workerNameEn} is unavailable for ${updatedBooking.bookingDate}, ${updatedBooking.slotWindow}. Please choose another slot or helper.`
+      });
     } else if (req.body.status === 'cancelled') {
       await createNotification({
         userId: updatedBooking.workerId,
@@ -924,12 +931,30 @@ app.get('/api/v1/notifications', authenticateToken, async (req, res) => {
 });
 
 app.patch('/api/v1/notifications/:id/dismiss', authenticateToken, async (req, res) => {
-  const id = req.params.id;
-  const item = mem.notifications.find(n => n.id === id);
+  const id = String(req.params.id || '');
+  const item = mem.notifications.find(n => n.id === id && n.userId === req.user.id);
   if (item) item.isDismissed = true;
+  if (pool && /^[0-9a-f-]{36}$/i.test(id)) {
+    try {
+      await pool.query(
+        'UPDATE notifications SET is_dismissed = TRUE WHERE id = $1 AND user_id = $2',
+        [id, req.user.id]
+      );
+    } catch (_) {}
+  }
+  res.json({ ok: true });
+});
+
+app.post('/api/v1/notifications/dismiss-all', authenticateToken, async (req, res) => {
+  for (const n of mem.notifications) {
+    if (n.userId === req.user.id) n.isDismissed = true;
+  }
   if (pool) {
     try {
-      await pool.query('UPDATE notifications SET is_dismissed = TRUE WHERE id = $1', [id]);
+      await pool.query(
+        'UPDATE notifications SET is_dismissed = TRUE WHERE user_id = $1 AND is_dismissed = FALSE',
+        [req.user.id]
+      );
     } catch (_) {}
   }
   res.json({ ok: true });

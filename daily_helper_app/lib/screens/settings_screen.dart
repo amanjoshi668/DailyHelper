@@ -5,6 +5,7 @@ import '../services/gcp_backend_service.dart';
 import '../services/i18n.dart';
 import '../services/notification_service.dart';
 import '../services/vault_storage.dart';
+import '../widgets/top_notification_banner.dart';
 import 'bug_report_screen.dart';
 import 'login_screen.dart';
 
@@ -113,6 +114,12 @@ class SettingsScreen extends StatelessWidget {
         final lang = vault.lang;
         final theme = Theme.of(context);
         final isProfessional = !user.isGuest && user.role == UserRole.professional;
+        final topNotif = vault.activeTopNotification;
+        final notifSubtitle = vault.osNotificationBlocked
+            ? AppStrings.tr(lang, 'notifStatusBlocked')
+            : (vault.remindersEnabled
+                ? AppStrings.tr(lang, 'notifStatusActive')
+                : AppStrings.tr(lang, 'notifStatusPaused'));
 
         return Scaffold(
           appBar: AppBar(
@@ -120,9 +127,23 @@ class SettingsScreen extends StatelessWidget {
             centerTitle: false,
           ),
           body: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
+            child: Column(
               children: [
+                if (topNotif != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                    child: TopNotificationBanner(
+                      notification: topNotif,
+                      queuedCount: vault.unreadNotificationCount,
+                      clearAllLabel: AppStrings.tr(lang, 'clearAll'),
+                      onDismiss: () => vault.dismissTopNotification(topNotif.id),
+                      onDismissAll: () => vault.dismissAllTopNotifications(),
+                    ),
+                  ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
                 // Account Card
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -269,9 +290,49 @@ class SettingsScreen extends StatelessWidget {
                           AppStrings.tr(lang, 'notifications'),
                           style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
                         ),
+                        subtitle: Text(
+                          notifSubtitle,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: vault.osNotificationBlocked
+                                ? theme.colorScheme.error
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                         value: vault.remindersEnabled,
                         onChanged: (val) => vault.setRemindersEnabled(val),
                       ),
+                      if (vault.osNotificationBlocked) ...[
+                        const Divider(height: 1),
+                        ListTile(
+                          key: const Key('settings_open_os_notif_tile'),
+                          leading: Icon(
+                            Icons.settings_outlined,
+                            size: 20,
+                            color: theme.colorScheme.error,
+                          ),
+                          title: Text(
+                            AppStrings.tr(lang, 'openSystemNotifSettings'),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.error,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          trailing: const Icon(Icons.open_in_new, size: 18),
+                          onTap: () => NotificationService.instance.openNotificationSettings(),
+                        ),
+                      ] else ...[
+                        const Divider(height: 1),
+                        ListTile(
+                          key: const Key('settings_test_notif_tile'),
+                          leading: const Icon(Icons.notifications_active_outlined, size: 20),
+                          title: Text(
+                            AppStrings.tr(lang, 'sendTestNotification'),
+                            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                          ),
+                          trailing: const Icon(Icons.send_outlined, size: 18),
+                          onTap: () => vault.sendTestNotification(),
+                        ),
+                      ],
                       const Divider(height: 1),
                       ListTile(
                         key: const Key('settings_language_tile'),
@@ -366,6 +427,9 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+              ],
+            ),
+          ),
               ],
             ),
           ),
