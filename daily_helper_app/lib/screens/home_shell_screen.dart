@@ -29,6 +29,9 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
   final _searchCtrl = TextEditingController();
   final _visitFeeCtrl = TextEditingController();
   final _hourlyRateCtrl = TextEditingController();
+  final _dailyRateCtrl = TextEditingController();
+  final _customServiceCtrl = TextEditingController();
+  final _customPriceCtrl = TextEditingController();
   final _upiIdCtrl = TextEditingController();
   final _servicePinsCtrl = TextEditingController();
   String? _syncedProId;
@@ -61,6 +64,9 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
     _searchCtrl.dispose();
     _visitFeeCtrl.dispose();
     _hourlyRateCtrl.dispose();
+    _dailyRateCtrl.dispose();
+    _customServiceCtrl.dispose();
+    _customPriceCtrl.dispose();
     _upiIdCtrl.dispose();
     _servicePinsCtrl.dispose();
     super.dispose();
@@ -119,11 +125,12 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
 
   Future<void> _showPinSelectorDialog(BuildContext context) async {
     final vault = VaultStorage.instance;
+    final lang = vault.lang;
     final ctrl = TextEditingController(text: vault.pinCode);
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Select PIN Code'),
+        title: Text(AppStrings.tr(lang, 'selectPinCode')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -148,9 +155,9 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
               controller: ctrl,
               maxLength: 6,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: '6-digit PIN Code',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: AppStrings.tr(lang, 'sixDigitPin'),
+                border: const OutlineInputBorder(),
               ),
             ),
           ],
@@ -158,7 +165,7 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
+            child: Text(AppStrings.tr(lang, 'cancel')),
           ),
           FilledButton(
             key: const Key('pin_dialog_apply_btn'),
@@ -169,7 +176,7 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
               }
               Navigator.of(ctx).pop();
             },
-            child: const Text('Apply'),
+            child: Text(AppStrings.tr(lang, 'apply')),
           ),
         ],
       ),
@@ -286,7 +293,7 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
-                child: const Text('Reset'),
+                child: Text(AppStrings.tr(lang, 'reset')),
               ),
             ],
           ),
@@ -876,22 +883,46 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
       _syncedProId = pro.id;
       _visitFeeCtrl.text = pro.visitFeeInr.toString();
       _hourlyRateCtrl.text = pro.hourlyRateInr.toString();
+      _dailyRateCtrl.text = pro.dailyRateInr.toString();
       _upiIdCtrl.text = pro.upiId;
       _servicePinsCtrl.text = pro.servicePins.join(', ');
+    }
+
+    Future<void> addCustomRate() async {
+      final svc = _customServiceCtrl.text.trim();
+      final price = int.tryParse(_customPriceCtrl.text.trim());
+      if (svc.isEmpty || price == null || price <= 0) return;
+      _customServiceCtrl.clear();
+      _customPriceCtrl.clear();
+      await vault.addCustomRateItem(svc, price);
     }
 
     void saveRateCard() {
       final visit = int.tryParse(_visitFeeCtrl.text.trim()) ?? pro.visitFeeInr;
       final hourly = int.tryParse(_hourlyRateCtrl.text.trim()) ?? pro.hourlyRateInr;
+      final daily = int.tryParse(_dailyRateCtrl.text.trim()) ?? pro.dailyRateInr;
       final upi = _upiIdCtrl.text.trim();
       final pins = _servicePinsCtrl.text
           .split(RegExp(r'[\s,]+'))
           .map((s) => s.trim())
           .where((s) => RegExp(r'^\d{6}$').hasMatch(s))
           .toList();
+
+      List<ServiceRateItem>? updatedCustomRates;
+      final pendingSvc = _customServiceCtrl.text.trim();
+      final pendingPrice = int.tryParse(_customPriceCtrl.text.trim());
+      if (pendingSvc.isNotEmpty && pendingPrice != null && pendingPrice > 0) {
+        updatedCustomRates = List<ServiceRateItem>.from(pro.customRates)
+          ..add(ServiceRateItem(service: pendingSvc, priceInr: pendingPrice));
+        _customServiceCtrl.clear();
+        _customPriceCtrl.clear();
+      }
+
       vault.updateProfessionalProfile(
         visitFeeInr: visit,
         hourlyRateInr: hourly,
+        dailyRateInr: daily,
+        customRates: updatedCustomRates,
         upiId: upi.isEmpty ? pro.upiId : upi,
         servicePins: pins.isEmpty ? pro.servicePins : pins,
         showSavedNotif: true,
@@ -1007,6 +1038,23 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
               ),
               const SizedBox(height: 12),
               TextField(
+                key: const Key('pro_daily_rate_field'),
+                controller: _dailyRateCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  isDense: true,
+                  labelText: '${AppStrings.tr(lang, 'dailyRate')} (₹)',
+                  border: const OutlineInputBorder(),
+                ),
+                onSubmitted: (v) {
+                  final parsed = int.tryParse(v.trim());
+                  if (parsed != null) {
+                    vault.updateProfessionalProfile(dailyRateInr: parsed);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              TextField(
                 key: const Key('pro_upi_field'),
                 controller: _upiIdCtrl,
                 decoration: InputDecoration(
@@ -1024,6 +1072,117 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
                   labelText: AppStrings.tr(lang, 'servicePins'),
                   hintText: '560034, 560095',
                   border: const OutlineInputBorder(),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Divider(height: 1),
+              ),
+              Text(
+                AppStrings.tr(lang, 'customRatesTitle'),
+                style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                AppStrings.tr(lang, 'customRatesSubtitle'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (pro.customRates.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    AppStrings.tr(lang, 'noCustomRatesYet'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                )
+              else
+                ...pro.customRates.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final item = entry.value;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceVariant.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.service,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '₹${item.priceInr}',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          key: Key('pro_delete_rate_btn_$i'),
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: () => vault.removeCustomRateItem(i),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: TextField(
+                      key: const Key('pro_custom_service_field'),
+                      controller: _customServiceCtrl,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        labelText: AppStrings.tr(lang, 'serviceNameHint'),
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      key: const Key('pro_custom_price_field'),
+                      controller: _customPriceCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        labelText: AppStrings.tr(lang, 'priceInrHint'),
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  key: const Key('pro_add_rate_btn'),
+                  onPressed: addCustomRate,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(AppStrings.tr(lang, 'addServiceRate')),
                 ),
               ),
               const SizedBox(height: 12),

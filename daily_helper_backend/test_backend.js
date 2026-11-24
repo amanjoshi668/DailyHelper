@@ -112,7 +112,7 @@ async function run() {
       userEmail: 'priya@test.local',
       description: 'Test bug report',
       pageContext: 'Explore',
-      appVersion: '1.0.0'
+      appVersion: '1.2.0'
     });
     assert.strictEqual(postBug.status, 201);
     const bugId = postBug.body.bug.id;
@@ -123,6 +123,32 @@ async function run() {
     await reqJson(port, 'PATCH', `/api/v1/bugs/${bugId}`, { status: 'resolved', resolutionNotes: 'Fixed in test' });
     const openAfter = await reqJson(port, 'GET', '/api/v1/bugs?status=open');
     assert(!openAfter.body.bugs.some(b => b.id === bugId));
+
+    // 6. User Language Preference & Worker Custom Rate Card Update (v1.2.0)
+    const prefRes = await reqJson(port, 'PUT', '/api/v1/users/me/preferences', {
+      preferredLang: 'mr'
+    }, custToken);
+    assert.strictEqual(prefRes.status, 200);
+    assert.strictEqual(prefRes.body.preferredLang, 'mr');
+
+    const rateRes = await reqJson(port, 'PUT', '/api/v1/workers/me', {
+      visitFeeInr: 179,
+      hourlyRateInr: 280,
+      dailyRateInr: 1050,
+      customRates: [
+        { service: 'Inverter Setup', priceInr: 350 },
+        { service: 'Ceiling Fan Install', priceInr: 180 }
+      ]
+    }, proToken);
+    assert.strictEqual(rateRes.status, 200);
+    assert.strictEqual(rateRes.body.worker.dailyRateInr, 1050);
+    assert.strictEqual(rateRes.body.worker.customRates.length, 2);
+    assert.strictEqual(rateRes.body.worker.customRates[0].service, 'Inverter Setup');
+
+    const refreshedWorkers = await reqJson(port, 'GET', '/api/v1/workers?trade=electrician');
+    const updatedPro = refreshedWorkers.body.workers.find(w => w.id === proId);
+    assert(updatedPro && updatedPro.dailyRateInr === 1050);
+    assert.strictEqual(updatedPro.customRates.length, 2);
 
     console.log('ALL BACKEND TESTS PASSED!');
   } finally {

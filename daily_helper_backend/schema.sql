@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS worker_profiles (
     experience_years INT NOT NULL DEFAULT 3,
     visit_fee_inr INT NOT NULL DEFAULT 149,
     hourly_rate_inr INT NOT NULL DEFAULT 250,
+    daily_rate_inr INT NOT NULL DEFAULT 900,
+    custom_rates JSONB NOT NULL DEFAULT '[]'::jsonb,
     upi_id VARCHAR(120) DEFAULT '',
     phone VARCHAR(40) DEFAULT '',
     languages VARCHAR(120) DEFAULT 'Hindi, English',
@@ -89,3 +91,7 @@ CREATE TABLE IF NOT EXISTS bug_reports (
     resolved_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON bug_reports(status);
+
+-- Safe additive migrations for existing live Cloud SQL databases
+ALTER TABLE worker_profiles ADD COLUMN IF NOT EXISTS daily_rate_inr INT NOT NULL DEFAULT 900;
+ALTER TABLE worker_profiles ADD COLUMN IF NOT EXISTS custom_rates JSONB NOT NULL DEFAULT '[]'::jsonb;

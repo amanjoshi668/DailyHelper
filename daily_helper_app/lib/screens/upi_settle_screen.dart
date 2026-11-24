@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
+import '../services/i18n.dart';
 import '../services/vault_storage.dart';
 import '../widgets/upi_qr_painter.dart';
 
@@ -45,14 +46,16 @@ class _UpiSettleScreenState extends State<UpiSettleScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pro = VaultStorage.instance.currentProfessionalProfile;
+    final vault = VaultStorage.instance;
+    final lang = vault.lang;
+    final pro = vault.currentProfessionalProfile;
     final theme = Theme.of(context);
     final amountText = _amountCtrl.text.trim().isEmpty ? '0' : _amountCtrl.text.trim();
     final upiPayload = 'upi://pay?pa=${pro.upiId}&am=$amountText&cu=INR';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Collect Payment'),
+        title: Text(AppStrings.tr(lang, 'collectPayment')),
         centerTitle: false,
       ),
       body: SafeArea(
@@ -63,9 +66,9 @@ class _UpiSettleScreenState extends State<UpiSettleScreen> {
               key: const Key('settle_amount_field'),
               controller: _amountCtrl,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Final Agreed Amount (₹)',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: AppStrings.tr(lang, 'finalAgreedAmount'),
+                border: const OutlineInputBorder(),
               ),
               onChanged: (_) => setState(() {}),
             ),
@@ -104,7 +107,7 @@ class _UpiSettleScreenState extends State<UpiSettleScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                '100% direct to your bank · 0% commission',
+                AppStrings.tr(lang, 'directToBankZeroFee'),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
@@ -132,7 +135,7 @@ class _UpiSettleScreenState extends State<UpiSettleScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Payment Received · Complete Job'),
+              child: Text(AppStrings.tr(lang, 'paymentReceivedComplete')),
             ),
           ],
         ),

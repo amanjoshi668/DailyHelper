@@ -16,6 +16,92 @@ class SettingsScreen extends StatelessWidget {
     required this.pageContext,
   });
 
+  Future<void> _showLanguagePicker(BuildContext context, VaultStorage vault) async {
+    final theme = Theme.of(context);
+    final currentLang = vault.lang;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    AppStrings.tr(currentLang, 'chooseLanguage'),
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    AppStrings.tr(currentLang, 'languageSubtitle'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final opt in AppStrings.supportedLanguages)
+                          ListTile(
+                            key: Key('lang_option_${opt.code}'),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            selected: opt.code == currentLang,
+                            selectedTileColor:
+                                theme.colorScheme.primaryContainer.withOpacity(0.35),
+                            title: Text(
+                              opt.nativeLabel,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                fontWeight:
+                                    opt.code == currentLang ? FontWeight.w700 : FontWeight.w500,
+                              ),
+                            ),
+                            subtitle: opt.nativeLabel == opt.englishLabel
+                                ? null
+                                : Text(
+                                    opt.englishLabel,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                            trailing: opt.code == currentLang
+                                ? Icon(Icons.check_circle, color: theme.colorScheme.primary)
+                                : const Icon(Icons.radio_button_unchecked, size: 20),
+                            onTap: () async {
+                              await vault.setLanguage(opt.code);
+                              if (ctx.mounted) Navigator.of(ctx).pop();
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -95,35 +181,72 @@ class SettingsScreen extends StatelessWidget {
                             ),
                           ],
                         )
-                      : Row(
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const Expanded(
-                              child: Column(
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        AppStrings.tr(lang, 'notSignedIn'),
+                                        style: const TextStyle(fontWeight: FontWeight.w700),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        AppStrings.tr(lang, 'signInPrompt'),
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: theme.colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                FilledButton(
+                                  key: const Key('settings_sign_in_btn'),
+                                  onPressed: () async {
+                                    final ok = await Navigator.of(context).push<bool>(
+                                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                    );
+                                    if (ok == true && context.mounted) {
+                                      Navigator.of(context).pop();
+                                    }
+                                  },
+                                  child: Text(AppStrings.tr(lang, 'signIn')),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceVariant.withOpacity(0.45),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    'Not signed in',
-                                    style: TextStyle(fontWeight: FontWeight.w700),
+                                  Icon(
+                                    Icons.handyman_outlined,
+                                    size: 16,
+                                    color: theme.colorScheme.primary,
                                   ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Sign in as Customer or Professional',
-                                    style: TextStyle(fontSize: 12),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      AppStrings.tr(lang, 'workerSignInHint'),
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        color: theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
-                            ),
-                            FilledButton(
-                              key: const Key('settings_sign_in_btn'),
-                              onPressed: () async {
-                                final ok = await Navigator.of(context).push<bool>(
-                                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                                );
-                                if (ok == true && context.mounted) {
-                                  Navigator.of(context).pop();
-                                }
-                              },
-                              child: Text(AppStrings.tr(lang, 'signIn')),
                             ),
                           ],
                         ),
@@ -141,6 +264,7 @@ class SettingsScreen extends StatelessWidget {
                     children: [
                       SwitchListTile(
                         key: const Key('settings_reminders_switch'),
+                        secondary: const Icon(Icons.notifications_outlined, size: 20),
                         title: Text(
                           AppStrings.tr(lang, 'notifications'),
                           style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
@@ -151,15 +275,22 @@ class SettingsScreen extends StatelessWidget {
                       const Divider(height: 1),
                       ListTile(
                         key: const Key('settings_language_tile'),
+                        leading: const Icon(Icons.language_outlined, size: 20),
                         title: Text(
                           AppStrings.tr(lang, 'language'),
                           style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
                         ),
-                        trailing: Text(
-                          lang == 'en' ? 'English' : 'हिंदी',
-                          style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                        subtitle: Text(
+                          AppStrings.languageDisplayLabel(lang),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        onTap: () => vault.setLanguage(lang == 'en' ? 'hi' : 'en'),
+                        trailing: const Icon(Icons.chevron_right, size: 20),
+                        onTap: () => _showLanguagePicker(context, vault),
                       ),
                     ],
                   ),

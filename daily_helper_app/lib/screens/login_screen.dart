@@ -126,8 +126,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     widget.pendingWorkerName != null
                         ? 'Sign in to confirm your appointment with ${widget.pendingWorkerName}.'
                         : (_selectedRole == UserRole.professional
-                            ? 'Manage your job requests, rates, and Khata.'
-                            : 'Book trusted local helpers and manage appointments.'),
+                            ? AppStrings.tr(lang, 'proSignInSub')
+                            : AppStrings.tr(lang, 'custSignInSub')),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -185,9 +185,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextField(
                       key: const Key('login_name_field'),
                       controller: _nameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Full Name',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: AppStrings.tr(lang, 'fullName'),
+                        border: const OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -195,9 +195,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       key: const Key('login_phone_field'),
                       controller: _phoneCtrl,
                       keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(
-                        labelText: 'Phone Number',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: AppStrings.tr(lang, 'phoneNumber'),
+                        border: const OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -206,16 +206,21 @@ class _LoginScreenState extends State<LoginScreen> {
                         key: const Key('login_trade_dropdown'),
                         value: _selectedTrade,
                         isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Primary Service / Trade',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: AppStrings.tr(lang, 'primaryService'),
+                          border: const OutlineInputBorder(),
                         ),
-                        items: const [
-                          DropdownMenuItem(value: 'electrician', child: Text('Electrician')),
-                          DropdownMenuItem(value: 'plumber', child: Text('Plumber')),
-                          DropdownMenuItem(value: 'carpenter', child: Text('Carpenter')),
-                          DropdownMenuItem(value: 'appliance', child: Text('AC & Appliance Repair')),
-                          DropdownMenuItem(value: 'painter', child: Text('Painter')),
+                        items: [
+                          DropdownMenuItem(
+                              value: 'electrician', child: Text(AppStrings.tr(lang, 'electrician'))),
+                          DropdownMenuItem(
+                              value: 'plumber', child: Text(AppStrings.tr(lang, 'plumber'))),
+                          DropdownMenuItem(
+                              value: 'carpenter', child: Text(AppStrings.tr(lang, 'carpenter'))),
+                          DropdownMenuItem(
+                              value: 'appliance', child: Text(AppStrings.tr(lang, 'appliance'))),
+                          DropdownMenuItem(
+                              value: 'painter', child: Text(AppStrings.tr(lang, 'painter'))),
                         ],
                         onChanged: (v) {
                           if (v != null) setState(() => _selectedTrade = v);
@@ -229,9 +234,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     key: const Key('login_email_field'),
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Email Address',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: AppStrings.tr(lang, 'emailAddress'),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -239,9 +244,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     key: const Key('login_password_field'),
                     controller: _passCtrl,
                     obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: AppStrings.tr(lang, 'password'),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 18),
@@ -281,8 +286,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     }),
                     child: Text(
                       _isRegister
-                          ? 'Already have an account? Sign In'
-                          : 'New to DailyHelper? Create an account',
+                          ? AppStrings.tr(lang, 'alreadyHaveAccount')
+                          : AppStrings.tr(lang, 'newToApp'),
                     ),
                   ),
                 ],

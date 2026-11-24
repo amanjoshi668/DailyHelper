@@ -75,6 +75,11 @@ function seedMemoryWorkers() {
       experienceYears: 8,
       visitFeeInr: 149,
       hourlyRateInr: 250,
+      dailyRateInr: 950,
+      customRates: [
+        { service: 'Ceiling Fan Install / Repair', priceInr: 180 },
+        { service: 'Switchboard / MCB Replacement', priceInr: 220 }
+      ],
       upiId: 'ramesh.elec@okaxis',
       phone: '+91 99001 44556',
       languages: 'Hindi, English',
@@ -96,6 +101,11 @@ function seedMemoryWorkers() {
       experienceYears: 6,
       visitFeeInr: 129,
       hourlyRateInr: 220,
+      dailyRateInr: 850,
+      customRates: [
+        { service: 'Tap / Mixer Replacement', priceInr: 150 },
+        { service: 'Flush Tank Repair', priceInr: 250 }
+      ],
       upiId: 'suresh.plumb@paytm',
       phone: '+91 98112 33445',
       languages: 'Hindi, English',
@@ -117,6 +127,11 @@ function seedMemoryWorkers() {
       experienceYears: 14,
       visitFeeInr: 149,
       hourlyRateInr: 300,
+      dailyRateInr: 1100,
+      customRates: [
+        { service: 'Door Lock & Hinge Fix', priceInr: 200 },
+        { service: 'Curtain Rod Drilling', priceInr: 180 }
+      ],
       upiId: 'salim.wood@ybl',
       phone: '+91 98204 77889',
       languages: 'Hindi, English',
@@ -138,6 +153,11 @@ function seedMemoryWorkers() {
       experienceYears: 9,
       visitFeeInr: 199,
       hourlyRateInr: 350,
+      dailyRateInr: 1300,
+      customRates: [
+        { service: 'Split AC Jet Service', priceInr: 499 },
+        { service: 'RO Filter Service', priceInr: 299 }
+      ],
       upiId: 'vikram.cool@okicici',
       phone: '+91 97390 55661',
       languages: 'Hindi, English',
@@ -159,6 +179,11 @@ function seedMemoryWorkers() {
       experienceYears: 11,
       visitFeeInr: 99,
       hourlyRateInr: 200,
+      dailyRateInr: 800,
+      customRates: [
+        { service: 'Dampness Putty Patch', priceInr: 350 },
+        { service: 'Single Wall Touch-up', priceInr: 450 }
+      ],
       upiId: 'manoj.paint@ybl',
       phone: '+91 96501 88990',
       languages: 'Hindi',
@@ -249,7 +274,7 @@ app.get('/health', async (_req, res) => {
   res.json({
     status: 'ok',
     service: 'dailyhelper-backend',
-    version: '1.1.0',
+    version: '1.2.0',
     database,
     dbMode: database,
     googleAuthEnabled: Boolean(GOOGLE_CLIENT_ID),
@@ -337,6 +362,8 @@ app.post('/api/v1/auth/register', async (req, res) => {
         experienceYears: 5,
         visitFeeInr: 149,
         hourlyRateInr: 250,
+        dailyRateInr: 900,
+        customRates: [],
         upiId: `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}@upi`,
         phone: phone || '+91 99000 00000',
         languages: 'Hindi, English',
@@ -388,15 +415,25 @@ async function upsertGoogleUser({ email, name, googleId, role }) {
   const cleanRole = role === 'professional' ? 'professional' : 'customer';
   if (pool) {
     const existing = await pool.query('SELECT id, name, email, phone, role FROM users WHERE email = $1', [email]);
+    let user;
     if (existing.rows.length > 0) {
       await pool.query('UPDATE users SET google_id = $1, updated_at = NOW() WHERE id = $2', [googleId, existing.rows[0].id]);
-      return existing.rows[0];
+      user = existing.rows[0];
+    } else {
+      const ins = await pool.query(
+        'INSERT INTO users (name, email, role, google_id) VALUES ($1, $2, $3, $4) RETURNING id, name, email, phone, role',
+        [name, email, cleanRole, googleId]
+      );
+      user = ins.rows[0];
     }
-    const ins = await pool.query(
-      'INSERT INTO users (name, email, role, google_id) VALUES ($1, $2, $3, $4) RETURNING id, name, email, phone, role',
-      [name, email, cleanRole, googleId]
-    );
-    return ins.rows[0];
+    if (user.role === 'professional') {
+      await pool.query(
+        `INSERT INTO worker_profiles (user_id, name_en, trade, service_pins)
+         VALUES ($1, $2, 'electrician', '["560034"]'::jsonb) ON CONFLICT (user_id) DO NOTHING`,
+        [user.id, user.name]
+      );
+    }
+    return user;
   }
 
   const existingId = mem.usersByEmail.get(email);
@@ -409,6 +446,31 @@ async function upsertGoogleUser({ email, name, googleId, role }) {
   const u = { id, name, email, phone: '', role: cleanRole, googleId };
   mem.users.set(id, u);
   mem.usersByEmail.set(email, id);
+  if (cleanRole === 'professional') {
+    mem.workers.set(id, {
+      id,
+      nameEn: name,
+      nameHi: name,
+      trade: 'electrician',
+      skills: ['General Inspection & Repair'],
+      servicePins: ['560034'],
+      experienceYears: 5,
+      visitFeeInr: 149,
+      hourlyRateInr: 250,
+      dailyRateInr: 900,
+      customRates: [],
+      upiId: `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}@upi`,
+      phone: '',
+      languages: 'Hindi, English',
+      verified: true,
+      isOnline: true,
+      blockedSlots: [],
+      ratingAvg: 4.8,
+      jobsCompleted: 0,
+      khataTodayInr: 0,
+      khataMonthInr: 0
+    });
+  }
   return { id, name, email, phone: '', role: cleanRole };
 }
 
@@ -544,6 +606,8 @@ function mapDbWorkerRow(r) {
     experienceYears: r.experience_years,
     visitFeeInr: r.visit_fee_inr,
     hourlyRateInr: r.hourly_rate_inr,
+    dailyRateInr: r.daily_rate_inr ?? 900,
+    customRates: r.custom_rates || [],
     upiId: r.upi_id || '',
     phone: r.phone || '',
     languages: r.languages || 'Hindi, English',
@@ -603,6 +667,25 @@ app.get('/api/v1/workers', async (req, res) => {
   res.json({ workers: list });
 });
 
+// --- User Preferences (Language) ---
+app.put('/api/v1/users/me/preferences', authenticateToken, async (req, res) => {
+  const allowed = new Set(['en', 'hi', 'mr', 'ta', 'te', 'kn']);
+  const preferredLang = allowed.has(String(req.body.preferredLang || '').toLowerCase())
+    ? String(req.body.preferredLang).toLowerCase()
+    : 'en';
+  const u = mem.users.get(req.user.id);
+  if (u) u.preferredLang = preferredLang;
+  if (pool) {
+    try {
+      await pool.query('UPDATE users SET preferred_lang = $1, updated_at = NOW() WHERE id = $2', [
+        preferredLang,
+        req.user.id
+      ]);
+    } catch (_) {}
+  }
+  res.json({ success: true, preferredLang });
+});
+
 app.put('/api/v1/workers/me', authenticateToken, async (req, res) => {
   const uid = req.user.id;
   const existing = mem.workers.get(uid) || {
@@ -615,6 +698,8 @@ app.put('/api/v1/workers/me', authenticateToken, async (req, res) => {
     experienceYears: 5,
     visitFeeInr: 149,
     hourlyRateInr: 250,
+    dailyRateInr: 900,
+    customRates: [],
     upiId: '',
     phone: '',
     languages: 'Hindi, English',
@@ -632,6 +717,8 @@ app.put('/api/v1/workers/me', authenticateToken, async (req, res) => {
     trade: String(req.body.trade ?? existing.trade),
     visitFeeInr: Number(req.body.visitFeeInr ?? existing.visitFeeInr),
     hourlyRateInr: Number(req.body.hourlyRateInr ?? existing.hourlyRateInr),
+    dailyRateInr: Number(req.body.dailyRateInr ?? existing.dailyRateInr ?? 900),
+    customRates: Array.isArray(req.body.customRates) ? req.body.customRates : (existing.customRates || []),
     upiId: String(req.body.upiId ?? existing.upiId),
     servicePins: Array.isArray(req.body.servicePins) ? req.body.servicePins : existing.servicePins,
     isOnline: req.body.isOnline !== undefined ? Boolean(req.body.isOnline) : existing.isOnline,
@@ -641,13 +728,15 @@ app.put('/api/v1/workers/me', authenticateToken, async (req, res) => {
   if (pool) {
     try {
       const q = await pool.query(
-        `INSERT INTO worker_profiles (user_id, name_en, name_hi, trade, service_pins, visit_fee_inr, hourly_rate_inr, upi_id, is_online, blocked_slots, updated_at)
-         VALUES ($1, $2, $2, $3, $4::jsonb, $5, $6, $7, $8, $9::jsonb, NOW())
+        `INSERT INTO worker_profiles (user_id, name_en, name_hi, trade, service_pins, visit_fee_inr, hourly_rate_inr, daily_rate_inr, custom_rates, upi_id, is_online, blocked_slots, updated_at)
+         VALUES ($1, $2, $2, $3, $4::jsonb, $5, $6, $7, $8::jsonb, $9, $10, $11::jsonb, NOW())
          ON CONFLICT (user_id) DO UPDATE SET
            trade = EXCLUDED.trade,
            service_pins = EXCLUDED.service_pins,
            visit_fee_inr = EXCLUDED.visit_fee_inr,
            hourly_rate_inr = EXCLUDED.hourly_rate_inr,
+           daily_rate_inr = EXCLUDED.daily_rate_inr,
+           custom_rates = EXCLUDED.custom_rates,
            upi_id = EXCLUDED.upi_id,
            is_online = EXCLUDED.is_online,
            blocked_slots = EXCLUDED.blocked_slots,
@@ -660,6 +749,8 @@ app.put('/api/v1/workers/me', authenticateToken, async (req, res) => {
           JSON.stringify(updated.servicePins),
           updated.visitFeeInr,
           updated.hourlyRateInr,
+          updated.dailyRateInr,
+          JSON.stringify(updated.customRates),
           updated.upiId,
           updated.isOnline,
           JSON.stringify(updated.blockedSlots)

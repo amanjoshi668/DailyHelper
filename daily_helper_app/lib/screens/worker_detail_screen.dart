@@ -19,9 +19,10 @@ class WorkerDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = VaultStorage.instance.lang;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Book Appointment'),
+        title: Text(AppStrings.tr(lang, 'bookAppointment')),
         centerTitle: false,
       ),
       body: SafeArea(
@@ -226,26 +227,59 @@ class _WorkerDetailPaneState extends State<WorkerDetailPane> {
                   padding: EdgeInsets.symmetric(vertical: 12),
                   child: Divider(height: 1),
                 ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 6,
                   children: [
-                    Flexible(
-                      child: Text(
-                        '${AppStrings.tr(lang, 'visitFee')}: ₹${w.visitFeeInr}',
-                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    Text(
+                      '${AppStrings.tr(lang, 'visitFee')}: ₹${w.visitFeeInr}',
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                     ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        '${AppStrings.tr(lang, 'hourlyRate')}: ₹${w.hourlyRateInr}/hr',
-                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    Text(
+                      '${AppStrings.tr(lang, 'hourlyRate')}: ₹${w.hourlyRateInr}/hr',
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      '${AppStrings.tr(lang, 'dailyRate')}: ₹${w.dailyRateInr}',
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
+                if (w.customRates.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    AppStrings.tr(lang, 'serviceRateCard'),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  for (final rate in w.customRates)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              rate.service,
+                              style: theme.textTheme.bodySmall,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '₹${rate.priceInr}',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 6,
@@ -277,9 +311,13 @@ class _WorkerDetailPaneState extends State<WorkerDetailPane> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: dates.map((d) {
+            children: dates.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final d = entry.value;
               final id = d['id']!;
-              final label = lang == 'hi' ? d['hi']! : d['en']!;
+              final label = idx == 0
+                  ? AppStrings.tr(lang, 'today')
+                  : (idx == 1 ? AppStrings.tr(lang, 'tomorrow') : d['en']!);
               return ChoiceChip(
                 label: Text(label),
                 selected: _selectedDate == id,

@@ -102,9 +102,9 @@ class _BugReportScreenState extends State<BugReportScreen> {
                     key: const Key('bug_description_field'),
                     controller: _descCtrl,
                     maxLines: 3,
-                    decoration: const InputDecoration(
-                      hintText: 'Describe the issue so we can fix it...',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      hintText: AppStrings.tr(lang, 'describeIssueHint'),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -174,7 +174,7 @@ class _BugReportScreenState extends State<BugReportScreen> {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              'Open',
+                              AppStrings.tr(lang, 'openBadge'),
                               style: theme.textTheme.labelSmall?.copyWith(
                                 color: theme.colorScheme.onSecondaryContainer,
                               ),

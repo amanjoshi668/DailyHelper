@@ -264,15 +264,45 @@ void main() {
     expect(find.text('Suresh Yadav'), findsOneWidget);
     expect(find.text('Ramesh Kumar'), findsNothing);
 
-    // Switch UI to Hindi (हिंदी) at 360x800 and verify zero overflow
+    // Switch UI via Settings -> Language Preference picker (Hindi & Marathi) at 360x800 and verify persistence + zero overflow
     await tester.tap(find.byKey(const Key('header_user_icon_btn')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('settings_language_tile')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('lang_option_hi')));
     await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('खोजें'), findsOneWidget);
     expect(tester.takeException(), isNull);
+
+    // Switch to Marathi and verify it persists even after signing out
+    await tester.tap(find.byKey(const Key('header_user_icon_btn')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings_language_tile')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('lang_option_mr')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings_sign_out_btn')));
+    await tester.pumpAndSettle();
+    expect(find.text('शोधा'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // Spot-check Tamil, Telugu, and Kannada at 360x800 for zero overflow
+    for (final code in ['ta', 'te', 'kn', 'en']) {
+      await tester.tap(find.byKey(const Key('header_user_icon_btn')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('settings_language_tile')));
+      await tester.pumpAndSettle();
+      final opt = find.byKey(Key('lang_option_$code'));
+      await tester.ensureVisible(opt);
+      await tester.pumpAndSettle();
+      await tester.tap(opt);
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('CUJ 6: DB-Logged Bug Reporting Shows Open User Bugs Only & Hides Fixed Bugs',
@@ -398,7 +428,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('CANCELLED'), findsOneWidget);
 
-    // 2. Professional edits Visit Fee, UPI ID, and Serviceable PINs via explicit Save Changes button
+    // 2. Professional edits Visit Fee, Full-Day Rate, Custom Service Rates, UPI ID, and Serviceable PINs
     await AuthService.instance.signOut();
     await AuthService.instance.registerWithEmail(
       name: 'Vikram Pro',
@@ -414,14 +444,50 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(const Key('pro_visit_fee_field')), '179');
+    await tester.enterText(find.byKey(const Key('pro_daily_rate_field')), '1050');
     await tester.enterText(find.byKey(const Key('pro_upi_field')), 'vikram@okaxis');
     await tester.enterText(find.byKey(const Key('pro_pins_field')), '560034, 560038');
+
+    // Add a custom service rate item and verify it appears immediately
+    await tester.drag(find.byType(ListView).first, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    final customSvcField = find.byKey(const Key('pro_custom_service_field'));
+    await tester.ensureVisible(customSvcField);
+    await tester.pumpAndSettle();
+    await tester.enterText(customSvcField, 'Inverter Setup');
+    await tester.enterText(find.byKey(const Key('pro_custom_price_field')), '350');
+    await tester.pumpAndSettle();
+    final addRateBtn = find.byKey(const Key('pro_add_rate_btn'));
+    await tester.ensureVisible(addRateBtn);
+    await tester.pumpAndSettle();
+    await tester.tap(addRateBtn);
+    await tester.pumpAndSettle();
+    expect(find.text('Inverter Setup'), findsOneWidget);
+    expect(find.text('₹350'), findsOneWidget);
+
     final saveBtn = find.byKey(const Key('pro_save_rates_btn'));
     await tester.ensureVisible(saveBtn);
+    await tester.pumpAndSettle();
     await tester.tap(saveBtn);
     await tester.pumpAndSettle();
 
     expect(find.text('Rate Card Updated'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // 3. Sign out and verify Customer/Visitor immediately sees Vikram Pro's updated custom rate card!
+    await AuthService.instance.signOut();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cust_tab_explore')));
+    await tester.pumpAndSettle();
+    final proCard = find.text('Vikram Pro');
+    await tester.ensureVisible(proCard);
+    await tester.pumpAndSettle();
+    await tester.tap(proCard);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Inverter Setup'), findsOneWidget);
+    expect(find.text('₹350'), findsOneWidget);
+    expect(find.textContaining('₹1050'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

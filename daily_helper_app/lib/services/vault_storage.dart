@@ -11,6 +11,7 @@ class VaultStorage extends ChangeNotifier {
 
   static const String _marketplaceBookingsKey = 'dailyhelper_marketplace_bookings_v1';
   static const String _marketplaceWorkersKey = 'dailyhelper_marketplace_workers_v1';
+  static const String _globalLangKey = 'dailyhelper_preferred_lang_v1';
 
   static const List<String> standardSlots = [
     '09:00 - 11:00 AM',
@@ -98,6 +99,11 @@ class VaultStorage extends ChangeNotifier {
           experienceYears: 8,
           visitFeeInr: 149,
           hourlyRateInr: 250,
+          dailyRateInr: 950,
+          customRates: [
+            ServiceRateItem(service: 'Ceiling Fan Install / Repair', priceInr: 180),
+            ServiceRateItem(service: 'Switchboard / MCB Replacement', priceInr: 220),
+          ],
           upiId: 'ramesh.elec@okaxis',
           phone: '+91 99001 44556',
           languages: 'Hindi, English',
@@ -119,6 +125,11 @@ class VaultStorage extends ChangeNotifier {
           experienceYears: 6,
           visitFeeInr: 129,
           hourlyRateInr: 220,
+          dailyRateInr: 850,
+          customRates: [
+            ServiceRateItem(service: 'Tap / Mixer Replacement', priceInr: 150),
+            ServiceRateItem(service: 'Flush Tank Repair', priceInr: 250),
+          ],
           upiId: 'suresh.plumb@paytm',
           phone: '+91 98112 33445',
           languages: 'Hindi, English',
@@ -140,6 +151,11 @@ class VaultStorage extends ChangeNotifier {
           experienceYears: 14,
           visitFeeInr: 149,
           hourlyRateInr: 300,
+          dailyRateInr: 1100,
+          customRates: [
+            ServiceRateItem(service: 'Door Lock & Hinge Fix', priceInr: 200),
+            ServiceRateItem(service: 'Curtain Rod Drilling', priceInr: 180),
+          ],
           upiId: 'salim.wood@ybl',
           phone: '+91 98204 77889',
           languages: 'Hindi, English',
@@ -162,6 +178,11 @@ class VaultStorage extends ChangeNotifier {
           experienceYears: 9,
           visitFeeInr: 199,
           hourlyRateInr: 350,
+          dailyRateInr: 1300,
+          customRates: [
+            ServiceRateItem(service: 'Split AC Jet Service', priceInr: 499),
+            ServiceRateItem(service: 'RO Filter Service', priceInr: 299),
+          ],
           upiId: 'vikram.cool@okicici',
           phone: '+91 97390 55661',
           languages: 'Hindi, English',
@@ -183,6 +204,11 @@ class VaultStorage extends ChangeNotifier {
           experienceYears: 11,
           visitFeeInr: 99,
           hourlyRateInr: 200,
+          dailyRateInr: 800,
+          customRates: [
+            ServiceRateItem(service: 'Dampness Putty Patch', priceInr: 350),
+            ServiceRateItem(service: 'Single Wall Touch-up', priceInr: 450),
+          ],
           upiId: 'manoj.paint@ybl',
           phone: '+91 96501 88990',
           languages: 'Hindi',
@@ -291,6 +317,11 @@ class VaultStorage extends ChangeNotifier {
       try {
         _hydrateFromMap(Map<String, dynamic>.from(jsonDecode(vaultRaw) as Map));
       } catch (_) {}
+    }
+
+    final savedGlobalLang = prefs.getString(_globalLangKey);
+    if (savedGlobalLang != null && savedGlobalLang.isNotEmpty) {
+      _lang = savedGlobalLang;
     }
 
     if (!_defaultSeeded) {
@@ -467,6 +498,10 @@ class VaultStorage extends ChangeNotifier {
     _activeUser = AppUser.visitor();
     _sessionToken = 'local_visitor';
     final prefs = await SharedPreferences.getInstance();
+    final savedGlobalLang = prefs.getString(_globalLangKey);
+    if (savedGlobalLang != null && savedGlobalLang.isNotEmpty) {
+      _lang = savedGlobalLang;
+    }
     _workers = await _loadSharedWorkers(prefs);
     notifyListeners();
   }
@@ -483,7 +518,10 @@ class VaultStorage extends ChangeNotifier {
   // --- User Preferences & Top Notifications ---
   Future<void> setLanguage(String newLang) async {
     _lang = newLang;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_globalLangKey, newLang);
     await _persistToDisk();
+    GcpBackendService.instance.updateUserLanguage(_sessionToken, newLang);
     notifyListeners();
   }
 
@@ -638,6 +676,8 @@ class VaultStorage extends ChangeNotifier {
   Future<void> updateProfessionalProfile({
     int? visitFeeInr,
     int? hourlyRateInr,
+    int? dailyRateInr,
+    List<ServiceRateItem>? customRates,
     String? upiId,
     List<String>? servicePins,
     bool? isOnline,
@@ -652,6 +692,8 @@ class VaultStorage extends ChangeNotifier {
     _workers[idx] = _workers[idx].copyWith(
       visitFeeInr: visitFeeInr,
       hourlyRateInr: hourlyRateInr,
+      dailyRateInr: dailyRateInr,
+      customRates: customRates,
       upiId: upiId,
       servicePins: servicePins,
       isOnline: isOnline,
@@ -665,6 +707,8 @@ class VaultStorage extends ChangeNotifier {
       _sessionToken,
       visitFeeInr: visitFeeInr,
       hourlyRateInr: hourlyRateInr,
+      dailyRateInr: dailyRateInr,
+      customRates: customRates,
       upiId: upiId,
       servicePins: servicePins,
       isOnline: isOnline,
@@ -674,12 +718,29 @@ class VaultStorage extends ChangeNotifier {
     if (showSavedNotif) {
       await pushTopNotification(
         title: 'Rate Card Updated',
-        body: 'Visit ₹${_workers[idx].visitFeeInr} · Hourly ₹${_workers[idx].hourlyRateInr}/hr',
+        body:
+            'Visit ₹${_workers[idx].visitFeeInr} · Hourly ₹${_workers[idx].hourlyRateInr}/hr · Day ₹${_workers[idx].dailyRateInr}',
       );
     } else {
       await _persistToDisk();
       notifyListeners();
     }
+  }
+
+  Future<void> addCustomRateItem(String service, int priceInr) async {
+    final clean = service.trim();
+    if (clean.isEmpty || priceInr <= 0) return;
+    final pro = currentProfessionalProfile;
+    final next = List<ServiceRateItem>.from(pro.customRates)
+      ..add(ServiceRateItem(service: clean, priceInr: priceInr));
+    await updateProfessionalProfile(customRates: next);
+  }
+
+  Future<void> removeCustomRateItem(int index) async {
+    final pro = currentProfessionalProfile;
+    if (index < 0 || index >= pro.customRates.length) return;
+    final next = List<ServiceRateItem>.from(pro.customRates)..removeAt(index);
+    await updateProfessionalProfile(customRates: next);
   }
 
   Future<void> updateJobStatus(

@@ -1,8 +1,8 @@
 # Product Requirements Document (PRD): DailyHelper
 
 **Product Name:** DailyHelper  
-**Version:** 1.0 (MVP Specification)  
-**Date:** November 20, 2026  
+**Version:** 1.2 (Live Release Specification)  
+**Date:** November 24, 2026  
 **Platform:** Cross-Platform Mobile & Web (Android App, Responsive Mobile/Desktop Web PWA, Tablet Split-View)  
 **Market Focus:** India-First Hyperlocal Blue-Collar Services Marketplace  
 
@@ -16,8 +16,8 @@ Unlike high-commission managed aggregators that inflate customer prices by 25–
 
 > [!IMPORTANT]
 > **Core MVP Product Decisions**
-> - **Geography & Localization:** India-first hyperlocal matching via 6-digit PIN code & locality, bilingual **English + Hindi (`हिंदी`)** UI, voice-keyboard friendly inputs, and Indian rate/payment norms.
-> - **Discovery & Pricing Model:** **Direct Discovery & Slot Booking** — customers browse nearby worker profiles, compare upfront visit fees, hourly/day rates, skills, and ratings, and book an available time slot directly.
+> - **Geography & Localization:** India-first hyperlocal matching via 6-digit PIN code & locality, **6-language Indian UI** selectable in Settings (`English`, `हिंदी`, `मराठी`, `தமிழ்`, `తెలుగు`, `ಕನ್ನಡ`), voice-keyboard friendly inputs, and Indian rate/payment norms.
+> - **Discovery & Pricing Model:** **Direct Discovery & Slot Booking** — workers customize their own Visit Fee, Hourly Rate, Full-Day Rate, and custom per-service task rate cards (`Rates & Khata`), while customers browse nearby profiles, compare transparent upfront rates, and book an available slot directly.
 > - **Payments & Monetization (MVP):** **Direct Cash / Worker's Own UPI QR** on job completion (`0%` payment gateway friction and `0%` commission in MVP to drive rapid worker adoption; optional Pro subscriptions/featured leads in Phase 2).
 > - **App Packaging:** **Single Unified "DailyHelper" App** with strict **role-based UI separation** by account type (`Customer` vs `Professional`): Customers only see `Explore` and `Bookings` (**never `Khata`**), while Professionals only see `Jobs` and `Rates & Khata` (**never `Explore`**), with a clean **User Icon** header and a dedicated **Login / Sign-Up Screen**.
 

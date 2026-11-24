@@ -65,6 +65,26 @@ class AppUser {
       );
 }
 
+class ServiceRateItem {
+  final String service;
+  final int priceInr;
+
+  const ServiceRateItem({
+    required this.service,
+    required this.priceInr,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'service': service,
+        'priceInr': priceInr,
+      };
+
+  factory ServiceRateItem.fromMap(Map<String, dynamic> map) => ServiceRateItem(
+        service: (map['service'] ?? '').toString(),
+        priceInr: (map['priceInr'] ?? map['price_inr'] as num?)?.toInt() ?? 0,
+      );
+}
+
 class WorkerProfile {
   final String id;
   final String nameEn;
@@ -76,6 +96,8 @@ class WorkerProfile {
   final int experienceYears;
   final int visitFeeInr;
   final int hourlyRateInr;
+  final int dailyRateInr;
+  final List<ServiceRateItem> customRates;
   final String upiId;
   final String phone;
   final String languages;
@@ -98,6 +120,8 @@ class WorkerProfile {
     required this.experienceYears,
     required this.visitFeeInr,
     required this.hourlyRateInr,
+    this.dailyRateInr = 900,
+    this.customRates = const [],
     required this.upiId,
     required this.phone,
     required this.languages,
@@ -117,14 +141,17 @@ class WorkerProfile {
     return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
   }
 
-  String localizedName(String lang) => (lang == 'hi' && nameHi.isNotEmpty) ? nameHi : nameEn;
+  String localizedName(String lang) =>
+      ((lang == 'hi' || lang == 'mr') && nameHi.isNotEmpty) ? nameHi : nameEn;
 
   List<String> localizedSkills(String lang) =>
-      (lang == 'hi' && skillsHi.isNotEmpty) ? skillsHi : skillsEn;
+      ((lang == 'hi' || lang == 'mr') && skillsHi.isNotEmpty) ? skillsHi : skillsEn;
 
   WorkerProfile copyWith({
     int? visitFeeInr,
     int? hourlyRateInr,
+    int? dailyRateInr,
+    List<ServiceRateItem>? customRates,
     String? upiId,
     List<String>? servicePins,
     bool? isOnline,
@@ -144,6 +171,8 @@ class WorkerProfile {
       experienceYears: experienceYears,
       visitFeeInr: visitFeeInr ?? this.visitFeeInr,
       hourlyRateInr: hourlyRateInr ?? this.hourlyRateInr,
+      dailyRateInr: dailyRateInr ?? this.dailyRateInr,
+      customRates: customRates ?? this.customRates,
       upiId: upiId ?? this.upiId,
       phone: phone,
       languages: languages,
@@ -168,6 +197,8 @@ class WorkerProfile {
         'experienceYears': experienceYears,
         'visitFeeInr': visitFeeInr,
         'hourlyRateInr': hourlyRateInr,
+        'dailyRateInr': dailyRateInr,
+        'customRates': customRates.map((r) => r.toMap()).toList(),
         'upiId': upiId,
         'phone': phone,
         'languages': languages,
@@ -185,6 +216,8 @@ class WorkerProfile {
     final skillsHiRaw = (map['skillsHi'] ?? skillsRaw) as List<dynamic>;
     final pinsRaw = (map['servicePins'] ?? const <dynamic>['560034']) as List<dynamic>;
     final blockedRaw = (map['blockedSlots'] ?? const <dynamic>[]) as List<dynamic>;
+    final customRatesRaw =
+        (map['customRates'] ?? map['custom_rates'] ?? const <dynamic>[]) as List<dynamic>;
     return WorkerProfile(
       id: (map['id'] ?? 'w1').toString(),
       nameEn: (map['nameEn'] ?? 'Helper').toString(),
@@ -196,6 +229,12 @@ class WorkerProfile {
       experienceYears: (map['experienceYears'] as num?)?.toInt() ?? 5,
       visitFeeInr: (map['visitFeeInr'] as num?)?.toInt() ?? 149,
       hourlyRateInr: (map['hourlyRateInr'] as num?)?.toInt() ?? 250,
+      dailyRateInr: (map['dailyRateInr'] ?? map['daily_rate_inr'] as num?)?.toInt() ?? 900,
+      customRates: customRatesRaw
+          .whereType<Map>()
+          .map((e) => ServiceRateItem.fromMap(Map<String, dynamic>.from(e)))
+          .where((r) => r.service.trim().isNotEmpty && r.priceInr > 0)
+          .toList(),
       upiId: (map['upiId'] ?? '').toString(),
       phone: (map['phone'] ?? '').toString(),
       languages: (map['languages'] ?? 'Hindi, English').toString(),

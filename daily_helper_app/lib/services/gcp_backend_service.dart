@@ -19,7 +19,7 @@ class GcpBackendService {
     'DAILYHELPER_API_URL',
     defaultValue: 'https://dailyhelper-backend-676039463235.us-central1.run.app',
   );
-  static const String appVersion = '1.1.0';
+  static const String appVersion = '1.2.0';
   static const String _localBugsKey = 'dailyhelper_bug_reports_v1';
 
   http.Client httpClient = http.Client();
@@ -140,6 +140,8 @@ class GcpBackendService {
     String token, {
     int? visitFeeInr,
     int? hourlyRateInr,
+    int? dailyRateInr,
+    List<ServiceRateItem>? customRates,
     String? upiId,
     List<String>? servicePins,
     bool? isOnline,
@@ -150,6 +152,10 @@ class GcpBackendService {
       final payload = <String, dynamic>{};
       if (visitFeeInr != null) payload['visitFeeInr'] = visitFeeInr;
       if (hourlyRateInr != null) payload['hourlyRateInr'] = hourlyRateInr;
+      if (dailyRateInr != null) payload['dailyRateInr'] = dailyRateInr;
+      if (customRates != null) {
+        payload['customRates'] = customRates.map((r) => r.toMap()).toList();
+      }
       if (upiId != null) payload['upiId'] = upiId;
       if (servicePins != null) payload['servicePins'] = servicePins;
       if (isOnline != null) payload['isOnline'] = isOnline;
@@ -173,6 +179,22 @@ class GcpBackendService {
       }
     } catch (_) {}
     return null;
+  }
+
+  Future<void> updateUserLanguage(String token, String preferredLang) async {
+    if (token.startsWith('local_')) return;
+    try {
+      await httpClient
+          .put(
+            Uri.parse('$baseUrl/api/v1/users/me/preferences'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({'preferredLang': preferredLang}),
+          )
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {}
   }
 
   Future<List<BookingRecord>?> fetchBookings(String token) async {
