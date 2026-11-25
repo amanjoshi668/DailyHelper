@@ -173,6 +173,14 @@ async function run() {
     assert(updatedPro && updatedPro.dailyRateInr === 1050);
     assert.strictEqual(updatedPro.customRates.length, 2);
 
+    // 7. Mobile Google OAuth session init + poll (v1.3.0)
+    const oauthInit = await reqJson(port, 'POST', '/api/v1/auth/mobile-google/init', { role: 'professional' });
+    assert.strictEqual(oauthInit.status, 200);
+    assert(oauthInit.body.sessionId && oauthInit.body.authUrl.includes('/auth/mobile-google'));
+    const oauthPoll = await reqJson(port, 'GET', `/api/v1/auth/mobile-google/poll?session=${oauthInit.body.sessionId}`);
+    assert.strictEqual(oauthPoll.status, 200);
+    assert.strictEqual(oauthPoll.body.status, 'pending');
+
     console.log('ALL BACKEND TESTS PASSED!');
   } finally {
     server.close();

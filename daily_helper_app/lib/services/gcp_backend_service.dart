@@ -19,7 +19,7 @@ class GcpBackendService {
     'DAILYHELPER_API_URL',
     defaultValue: 'https://dailyhelper-backend-676039463235.us-central1.run.app',
   );
-  static const String appVersion = '1.2.1';
+  static const String appVersion = '1.3.0';
   static const String _localBugsKey = 'dailyhelper_bug_reports_v1';
 
   http.Client httpClient = http.Client();

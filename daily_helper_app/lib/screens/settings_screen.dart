@@ -136,6 +136,12 @@ class SettingsScreen extends StatelessWidget {
                       notification: topNotif,
                       queuedCount: vault.unreadNotificationCount,
                       clearAllLabel: AppStrings.tr(lang, 'clearAll'),
+                      onTap: () {
+                        vault.dismissTopNotification(topNotif.id);
+                        if (Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        }
+                      },
                       onDismiss: () => vault.dismissTopNotification(topNotif.id),
                       onDismissAll: () => vault.dismissAllTopNotifications(),
                     ),

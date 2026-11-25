@@ -8,12 +8,14 @@ import 'login_screen.dart';
 class WorkerDetailScreen extends StatelessWidget {
   final WorkerProfile worker;
   final String initialIssueNote;
+  final String? initialPreferredSlot;
   final VoidCallback onBookingConfirmed;
 
   const WorkerDetailScreen({
     super.key,
     required this.worker,
     this.initialIssueNote = '',
+    this.initialPreferredSlot,
     required this.onBookingConfirmed,
   });
 
@@ -29,6 +31,7 @@ class WorkerDetailScreen extends StatelessWidget {
         child: WorkerDetailPane(
           worker: worker,
           initialIssueNote: initialIssueNote,
+          initialPreferredSlot: initialPreferredSlot,
           onBookingConfirmed: () {
             Navigator.of(context).pop();
             onBookingConfirmed();
@@ -42,12 +45,14 @@ class WorkerDetailScreen extends StatelessWidget {
 class WorkerDetailPane extends StatefulWidget {
   final WorkerProfile worker;
   final String initialIssueNote;
+  final String? initialPreferredSlot;
   final VoidCallback onBookingConfirmed;
 
   const WorkerDetailPane({
     super.key,
     required this.worker,
     this.initialIssueNote = '',
+    this.initialPreferredSlot,
     required this.onBookingConfirmed,
   });
 
@@ -66,7 +71,7 @@ class _WorkerDetailPaneState extends State<WorkerDetailPane> {
     super.initState();
     final dates = VaultStorage.instance.upcomingDateChoices;
     _selectedDate = dates.first['id']!;
-    _selectedSlot = _firstOpenSlot(widget.worker);
+    _selectedSlot = _resolveInitialSlot(widget.worker, widget.initialPreferredSlot);
     _noteCtrl = TextEditingController(text: widget.initialIssueNote);
     _addrCtrl = TextEditingController(text: VaultStorage.instance.savedAddress);
   }
@@ -74,8 +79,9 @@ class _WorkerDetailPaneState extends State<WorkerDetailPane> {
   @override
   void didUpdateWidget(covariant WorkerDetailPane oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.worker.id != widget.worker.id) {
-      _selectedSlot = _firstOpenSlot(widget.worker);
+    if (oldWidget.worker.id != widget.worker.id ||
+        oldWidget.initialPreferredSlot != widget.initialPreferredSlot) {
+      _selectedSlot = _resolveInitialSlot(widget.worker, widget.initialPreferredSlot);
     }
     if (oldWidget.initialIssueNote != widget.initialIssueNote &&
         widget.initialIssueNote.isNotEmpty) {
@@ -83,7 +89,12 @@ class _WorkerDetailPaneState extends State<WorkerDetailPane> {
     }
   }
 
-  String _firstOpenSlot(WorkerProfile w) {
+  String _resolveInitialSlot(WorkerProfile w, String? preferred) {
+    if (preferred != null &&
+        VaultStorage.standardSlots.contains(preferred) &&
+        !w.blockedSlots.contains(preferred)) {
+      return preferred;
+    }
     for (final s in VaultStorage.standardSlots) {
       if (!w.blockedSlots.contains(s)) return s;
     }

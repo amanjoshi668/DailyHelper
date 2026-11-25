@@ -22,6 +22,8 @@ class MainActivity : FlutterActivity() {
         private const val REQ_CREATE_DOC = 4102
     }
 
+    private var methodChannel: MethodChannel? = null
+    private var pendingNotifTarget: String? = null
     private var pendingNotifResult: MethodChannel.Result? = null
     private var pendingReminderArgs: Map<String, Any?>? = null
     private var pendingExportContent: String? = null
@@ -30,20 +32,37 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         ReminderScheduler.ensureChannels(this)
+        pendingNotifTarget = intent?.getStringExtra(ReminderScheduler.EXTRA_TARGET)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-            .setMethodCallHandler { call: MethodCall, result: MethodChannel.Result ->
-                when (call.method) {
-                    "configureReminders" -> handleConfigureReminders(call, result)
-                    "showNotification" -> handleShowNotification(call, result)
-                    "scheduleAppointmentReminder" -> handleScheduleAppointmentReminder(call, result)
-                    "cancelAppointmentReminder" -> handleCancelAppointmentReminder(call, result)
-                    "getNotificationStatus" -> handleGetNotificationStatus(result)
-                    "openNotificationSettings" -> handleOpenNotificationSettings(result)
-                    "saveExportDocument" -> handleSaveExportDocument(call, result)
-                    else -> result.notImplemented()
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        methodChannel = channel
+        channel.setMethodCallHandler { call: MethodCall, result: MethodChannel.Result ->
+            when (call.method) {
+                "configureReminders" -> handleConfigureReminders(call, result)
+                "showNotification" -> handleShowNotification(call, result)
+                "scheduleAppointmentReminder" -> handleScheduleAppointmentReminder(call, result)
+                "cancelAppointmentReminder" -> handleCancelAppointmentReminder(call, result)
+                "getNotificationStatus" -> handleGetNotificationStatus(result)
+                "openNotificationSettings" -> handleOpenNotificationSettings(result)
+                "consumePendingNotificationTap" -> {
+                    val target = pendingNotifTarget
+                    pendingNotifTarget = null
+                    result.success(target)
                 }
+                "saveExportDocument" -> handleSaveExportDocument(call, result)
+                else -> result.notImplemented()
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val target = intent.getStringExtra(ReminderScheduler.EXTRA_TARGET)
+        if (!target.isNullOrBlank()) {
+            pendingNotifTarget = target
+            methodChannel?.invokeMethod("onNotificationTapped", target)
+        }
     }
 
     private fun handleConfigureReminders(call: MethodCall, result: MethodChannel.Result) {
@@ -95,13 +114,15 @@ class MainActivity : FlutterActivity() {
         val title = call.argument<String>("title") ?: "DailyHelper"
         val body = call.argument<String>("body") ?: ""
         val highPriority = call.argument<Boolean>("highPriority") ?: true
+        val target = call.argument<String>("target") ?: "home"
 
         val shown = ReminderScheduler.showInstantNotification(
             context = this,
             notifId = id,
             title = title,
             body = body,
-            highPriority = highPriority
+            highPriority = highPriority,
+            target = target
         )
         result.success(shown)
     }

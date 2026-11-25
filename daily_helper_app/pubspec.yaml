@@ -1,7 +1,7 @@
 name: daily_helper_app
 description: "DailyHelper — Hyperlocal booking app for electricians, plumbers, carpenters & professionals."
 publish_to: 'none'
-version: 1.2.1+4
+version: 1.3.0+5
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -14,6 +14,7 @@ dependencies:
   http: ^1.2.2
   url_launcher: ^6.2.2
   crypto: ^3.0.3
+  qr: ^3.0.1
 
 dev_dependencies:
   flutter_test:

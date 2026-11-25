@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../services/ai_issue_parser.dart';
 import '../services/auth_service.dart';
 import '../services/i18n.dart';
+import '../services/notification_service.dart';
 import '../services/vault_storage.dart';
 import '../widgets/top_notification_banner.dart';
 import 'settings_screen.dart';
@@ -56,11 +57,45 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
     });
   }
 
+  void _handleOsNotificationTarget(String target) {
+    if (!mounted) return;
+    final auth = AuthService.instance;
+    final isPro = auth.isLoggedIn && auth.currentUser.role == UserRole.professional;
+    setState(() {
+      if (isPro) {
+        _proTabIndex = target == 'khata' ? 1 : 0;
+      } else if (target == 'bookings' || auth.isLoggedIn) {
+        _custTabIndex = 1;
+      }
+    });
+    VaultStorage.instance.refreshFromCloud();
+  }
+
+  void _handleBannerTap(AppNotificationItem notif, bool isPro) {
+    final vault = VaultStorage.instance;
+    final lower = '${notif.title} ${notif.body}'.toLowerCase();
+    setState(() {
+      if (isPro) {
+        _proTabIndex = (lower.contains('rate') || lower.contains('khata')) ? 1 : 0;
+      } else if (AuthService.instance.isLoggedIn || vault.bookings.isNotEmpty) {
+        _custTabIndex = 1;
+      }
+    });
+    vault.dismissTopNotification(notif.id);
+    vault.refreshFromCloud();
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startForegroundPoll();
+    NotificationService.instance.setOnNotificationTap(_handleOsNotificationTarget);
+    NotificationService.instance.consumePendingNotificationTap().then((target) {
+      if (target != null && mounted) {
+        _handleOsNotificationTarget(target);
+      }
+    });
   }
 
   @override
@@ -76,6 +111,7 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
 
   @override
   void dispose() {
+    NotificationService.instance.setOnNotificationTap(null);
     _pollTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _searchCtrl.dispose();
@@ -246,15 +282,39 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
     final vault = VaultStorage.instance;
     final lang = vault.lang;
     final theme = Theme.of(context);
+    final rawQ = _searchQuery.trim().toLowerCase();
+    final hasSavedHelpers = vault.savedWorkerIds.isNotEmpty;
+    final activeFilter = (_selectedTrade == 'saved' && !hasSavedHelpers) ? 'all' : _selectedTrade;
+
     final tradeOnline = vault.workers.where((w) {
       if (!w.isOnline) return false;
-      if (_selectedTrade != 'all' && w.trade != _selectedTrade) return false;
+      if (activeFilter == 'saved') {
+        if (!vault.isWorkerSaved(w.id)) return false;
+      } else if (activeFilter != 'all' && w.trade != activeFilter) {
+        return false;
+      }
+      if (rawQ.isNotEmpty && _aiSuggestion == null) {
+        final hay = [
+          w.nameEn,
+          w.nameHi,
+          w.trade,
+          AppStrings.tradeLabel(lang, w.trade),
+          ...w.skillsEn,
+          ...w.skillsHi,
+          ...w.customRates.map((r) => r.service),
+        ].join(' ').toLowerCase();
+        if (!hay.contains(rawQ)) return false;
+      }
       return true;
     }).toList();
 
     final exactPin = tradeOnline.where((w) => w.servicePins.contains(vault.pinCode)).toList();
     final filtered = exactPin.isNotEmpty ? exactPin : tradeOnline;
     final showingNearbyFallback = exactPin.isEmpty && tradeOnline.isNotEmpty;
+    final chipIds = [
+      if (hasSavedHelpers) 'saved',
+      ..._tradeFilterIds,
+    ];
 
     return RefreshIndicator(
       onRefresh: vault.refreshFromCloud,
@@ -317,19 +377,22 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
         ],
         const SizedBox(height: 12),
 
-        // Clean Category Pills
+        // Clean Category Pills (+ Saved Helpers chip when user has bookmarked helpers)
         SizedBox(
           height: 38,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: _tradeFilterIds.length,
+            itemCount: chipIds.length,
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (context, i) {
-              final id = _tradeFilterIds[i];
-              final selected = _selectedTrade == id;
+              final id = chipIds[i];
+              final selected = activeFilter == id;
+              final label = id == 'saved'
+                  ? '♥ ${AppStrings.tr(lang, 'savedHelpers')}'
+                  : AppStrings.tradeLabel(lang, id);
               return ChoiceChip(
                 key: Key('trade_chip_$id'),
-                label: Text(AppStrings.tradeLabel(lang, id)),
+                label: Text(label),
                 selected: selected,
                 onSelected: (_) => setState(() => _selectedTrade = id),
               );
@@ -338,6 +401,33 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
         ),
         const SizedBox(height: 12),
 
+        if (filtered.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  AppStrings.tr(lang, 'noHelpersMatch'),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  key: const Key('explore_reset_filters_btn'),
+                  onPressed: _clearSearch,
+                  child: Text(AppStrings.tr(lang, 'reset')),
+                ),
+              ],
+            ),
+          )
+        else ...[
         if (showingNearbyFallback) ...[
           Padding(
             padding: const EdgeInsets.only(bottom: 10, left: 2),
@@ -441,7 +531,9 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
                       children: [
                         Flexible(
                           child: Text(
-                            '₹${w.visitFeeInr} ${AppStrings.tr(lang, 'visit')} · ₹${w.hourlyRateInr}/hr',
+                            w.customRates.isNotEmpty
+                                ? '₹${w.visitFeeInr} ${AppStrings.tr(lang, 'visit')} · ₹${w.hourlyRateInr}/hr · ${w.customRates.length} ${AppStrings.tr(lang, 'customRatesTag')}'
+                                : '₹${w.visitFeeInr} ${AppStrings.tr(lang, 'visit')} · ₹${w.hourlyRateInr}/hr',
                             style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -465,6 +557,7 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
             ),
           ),
         ],
+        ],
       ),
     );
   }
@@ -479,12 +572,50 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
         builder: (_) => WorkerDetailScreen(
           worker: worker,
           initialIssueNote: _aiSuggestion?.summaryNote ?? _searchQuery,
+          initialPreferredSlot: _aiSuggestion?.preferredSlot,
           onBookingConfirmed: () {
             if (mounted) setState(() => _custTabIndex = 1);
           },
         ),
       ),
     );
+  }
+
+  String _localizedBookingStatus(String lang, String status) {
+    switch (status) {
+      case 'requested':
+        return AppStrings.tr(lang, 'statusRequested').toUpperCase();
+      case 'confirmed':
+        return AppStrings.tr(lang, 'statusConfirmed').toUpperCase();
+      case 'in_progress':
+        return AppStrings.tr(lang, 'statusInProgress').toUpperCase();
+      case 'completed':
+        return AppStrings.tr(lang, 'statusCompleted').toUpperCase();
+      case 'cancelled':
+        return AppStrings.tr(lang, 'statusCancelled').toUpperCase();
+      case 'declined':
+        return AppStrings.tr(lang, 'statusDeclined').toUpperCase();
+      case 'expired':
+        return AppStrings.tr(lang, 'statusExpired').toUpperCase();
+      default:
+        return status.toUpperCase();
+    }
+  }
+
+  (Color, Color) _statusBadgeColors(ThemeData theme, String status) {
+    switch (status) {
+      case 'confirmed':
+      case 'completed':
+        return (const Color(0xFFDCFCE7), const Color(0xFF166534));
+      case 'in_progress':
+        return (theme.colorScheme.primaryContainer, theme.colorScheme.onPrimaryContainer);
+      case 'cancelled':
+      case 'declined':
+      case 'expired':
+        return (theme.colorScheme.errorContainer, theme.colorScheme.onErrorContainer);
+      default:
+        return (theme.colorScheme.secondaryContainer, theme.colorScheme.onSecondaryContainer);
+    }
   }
 
   Widget _buildCustomerBookingsList(BuildContext context) {
@@ -516,6 +647,7 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, i) {
           final b = items[i];
+          final (badgeBg, badgeFg) = _statusBadgeColors(theme, b.status);
           return Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -539,14 +671,14 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.secondaryContainer,
+                        color: badgeBg,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        b.status.toUpperCase(),
+                        _localizedBookingStatus(lang, b.status),
                         style: theme.textTheme.labelSmall?.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.onSecondaryContainer,
+                          color: badgeFg,
                         ),
                       ),
                     ),
@@ -946,6 +1078,9 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
       );
     }
 
+    final recentCompleted =
+        vault.bookings.where((b) => b.status == 'completed').take(5).toList();
+
     return RefreshIndicator(
       onRefresh: vault.refreshFromCloud,
       child: ListView(
@@ -991,6 +1126,44 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
                   ),
                 ],
               ),
+              if (recentCompleted.isNotEmpty) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Divider(height: 1),
+                ),
+                Text(
+                  AppStrings.tr(lang, 'recentCompletedJobs'),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (final job in recentCompleted)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${job.customerName} · ${job.bookingDate}',
+                            style: theme.textTheme.bodySmall,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '₹${job.finalAmountInr ?? job.visitFeeInr} (${job.paymentMethod ?? 'Cash'})',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ],
           ),
         ),
@@ -1296,6 +1469,7 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
                       child: WorkerDetailPane(
                         worker: selectedWorker,
                         initialIssueNote: _aiSuggestion?.summaryNote ?? _searchQuery,
+                        initialPreferredSlot: _aiSuggestion?.preferredSlot,
                         onBookingConfirmed: () => setState(() => _custTabIndex = 1),
                       ),
                     ),
@@ -1371,6 +1545,7 @@ class _HomeShellScreenState extends State<HomeShellScreen> with WidgetsBindingOb
                         notification: topNotif,
                         queuedCount: vault.unreadNotificationCount,
                         clearAllLabel: AppStrings.tr(lang, 'clearAll'),
+                        onTap: () => _handleBannerTap(topNotif, isPro),
                         onDismiss: () => vault.dismissTopNotification(topNotif.id),
                         onDismissAll: () => vault.dismissAllTopNotifications(),
                       ),

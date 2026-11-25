@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:qr/qr.dart';
 
+/// Renders a real ISO/IEC 18004 scannable QR code (compatible with PhonePe, GPay, Paytm, BHIM)
+/// on a high-contrast white quiet zone so it scans reliably in both light and dark modes.
 class UpiQrWidget extends StatelessWidget {
   final String data;
   final double size;
@@ -7,74 +10,67 @@ class UpiQrWidget extends StatelessWidget {
   const UpiQrWidget({
     super.key,
     required this.data,
-    this.size = 160,
+    this.size = 168,
   });
 
   @override
   Widget build(BuildContext context) {
-    final fg = Theme.of(context).colorScheme.onSurface;
-    final bg = Theme.of(context).colorScheme.surface;
+    final safeData = data.trim().isEmpty ? 'upi://pay?pa=dailyhelper@upi&cu=INR' : data.trim();
+    final qrCode = QrCode.fromData(
+      data: safeData,
+      errorCorrectLevel: QrErrorCorrectLevel.M,
+    );
+    final qrImage = QrImage(qrCode);
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: bg,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: CustomPaint(
         size: Size(size, size),
-        painter: _DeterministicQrPainter(seed: data, color: fg),
+        painter: _RealQrPainter(qrImage: qrImage),
       ),
     );
   }
 }
 
-class _DeterministicQrPainter extends CustomPainter {
-  final String seed;
-  final Color color;
+class _RealQrPainter extends CustomPainter {
+  final QrImage qrImage;
 
-  _DeterministicQrPainter({required this.seed, required this.color});
-
-  bool _isFinder(int r, int c, int r0, int c0) {
-    final lr = r - r0;
-    final lc = c - c0;
-    return lr == 0 || lr == 6 || lc == 0 || lc == 6 || (lr >= 2 && lr <= 4 && lc >= 2 && lc <= 4);
-  }
+  _RealQrPainter({required this.qrImage});
 
   @override
   void paint(Canvas canvas, Size size) {
-    const grid = 21;
-    final cell = size.width / grid;
-    final paint = Paint()..color = color;
+    final count = qrImage.moduleCount;
+    if (count <= 0) return;
 
-    int h = 0x811c9dc5;
-    for (int i = 0; i < seed.length; i++) {
-      h ^= seed.codeUnitAt(i);
-      h = (h * 0x01000193) & 0x7fffffff;
-    }
+    final moduleSize = size.width / count;
+    final paint = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = false;
 
-    for (int r = 0; r < grid; r++) {
-      for (int c = 0; c < grid; c++) {
-        bool on = false;
-        if (r < 7 && c < 7) {
-          on = _isFinder(r, c, 0, 0);
-        } else if (r < 7 && c >= grid - 7) {
-          on = _isFinder(r, c, 0, grid - 7);
-        } else if (r >= grid - 7 && c < 7) {
-          on = _isFinder(r, c, grid - 7, 0);
-        } else {
-          h ^= (r * 31 + c * 17);
-          h = (h * 0x01000193) & 0x7fffffff;
-          on = (h % 10) < 5;
-        }
-        if (on) {
-          canvas.drawRect(Rect.fromLTWH(c * cell, r * cell, cell, cell), paint);
+    for (int y = 0; y < count; y++) {
+      for (int x = 0; x < count; x++) {
+        if (qrImage.isDark(y, x)) {
+          canvas.drawRect(
+            Rect.fromLTWH(
+              x * moduleSize,
+              y * moduleSize,
+              moduleSize + 0.25,
+              moduleSize + 0.25,
+            ),
+            paint,
+          );
         }
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant _DeterministicQrPainter oldDelegate) =>
-      oldDelegate.seed != seed || oldDelegate.color != color;
+  bool shouldRepaint(covariant _RealQrPainter oldDelegate) =>
+      oldDelegate.qrImage.moduleCount != qrImage.moduleCount;
 }

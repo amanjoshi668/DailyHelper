@@ -274,7 +274,7 @@ app.get('/health', async (_req, res) => {
   res.json({
     status: 'ok',
     service: 'dailyhelper-backend',
-    version: '1.2.1',
+    version: '1.3.0',
     database,
     dbMode: database,
     googleAuthEnabled: Boolean(GOOGLE_CLIENT_ID),
@@ -497,11 +497,19 @@ app.post('/api/v1/auth/google', async (req, res) => {
   }
 });
 
-// Android Browser Google Sign-In Handoff
-app.post('/api/v1/auth/mobile-google/init', (req, res) => {
+// Android Browser Google Sign-In Handoff (Stateless PostgreSQL + In-Memory Fallback)
+app.post('/api/v1/auth/mobile-google/init', async (req, res) => {
   const sessionId = crypto.randomUUID();
   const role = req.body.role === 'professional' ? 'professional' : 'customer';
   mem.mobileGoogleSessions.set(sessionId, { status: 'pending', role, createdAt: Date.now() });
+  if (pool) {
+    try {
+      await pool.query(
+        'INSERT INTO mobile_google_sessions (session_id, role, status) VALUES ($1, $2, \'pending\')',
+        [sessionId, role]
+      );
+    } catch (_) {}
+  }
   res.json({ sessionId, authUrl: `/auth/mobile-google?session=${sessionId}` });
 });
 
@@ -510,25 +518,49 @@ app.get('/auth/mobile-google', (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sign in to DailyHelper</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script></head>
-<body style="font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;padding:20px;text-align:center">
-  <h2>Sign in to DailyHelper</h2>
-  <p>Complete Google Sign-In to return to the app.</p>
-  <div id="g_id_onload" data-client_id="${GOOGLE_CLIENT_ID}" data-callback="onGoogleSignIn"></div>
-  <div class="g_id_signin" data-type="standard" data-size="large"></div>
-  <p id="msg" style="margin-top:16px;color:#4b5563"></p>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  body{font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:85vh;padding:24px;text-align:center;background:#f8fafc;color:#0f172a;margin:0}
+  .card{background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:28px 24px;max-width:400px;width:100%;box-shadow:0 6px 24px rgba(15,23,42,.06)}
+  h2{margin:0 0 8px;font-size:20px}
+  p{margin:0 0 18px;color:#475569;font-size:14px;line-height:1.5}
+  .btn-wrap{display:flex;justify-content:center;min-height:44px;margin:12px 0}
+  .hint{font-size:12px;color:#64748b;margin-top:16px}
+  .ok{color:#15803d;font-weight:600}
+  .err{color:#b91c1c;font-weight:600}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h2>Sign in to DailyHelper</h2>
+    <p>Choose your Google account below to finish signing in and return to DailyHelper.</p>
+    <div id="g_id_onload" data-client_id="${GOOGLE_CLIENT_ID}" data-callback="onGoogleSignIn" data-auto_prompt="false"></div>
+    <div class="btn-wrap"><div class="g_id_signin" data-type="standard" data-size="large" data-width="280"></div></div>
+    <p id="msg"></p>
+    <p class="hint">If Google sign-in is unavailable in this browser, switch back to DailyHelper and sign in with Email &amp; Password.</p>
+  </div>
   <script>
     async function onGoogleSignIn(resp) {
-      document.getElementById('msg').textContent = 'Verifying account...';
-      const r = await fetch('/api/v1/auth/mobile-google/complete', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ session: ${JSON.stringify(session)}, idToken: resp.credential })
-      });
-      if (r.ok) {
-        document.getElementById('msg').textContent = 'Signed in! You may return to the DailyHelper app.';
-      } else {
-        document.getElementById('msg').textContent = 'Sign-in could not be completed.';
+      const msg = document.getElementById('msg');
+      msg.className = '';
+      msg.textContent = 'Verifying your Google account...';
+      try {
+        const r = await fetch('/api/v1/auth/mobile-google/complete', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ session: ${JSON.stringify(session)}, idToken: resp.credential })
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) {
+          msg.className = 'ok';
+          msg.textContent = 'Signed in! Switch back to the DailyHelper app now.';
+        } else {
+          msg.className = 'err';
+          msg.textContent = data.error || 'Sign-in could not be completed. Try Email & Password in the app.';
+        }
+      } catch (e) {
+        msg.className = 'err';
+        msg.textContent = 'Network error verifying sign-in. Please try again.';
       }
     }
   </script>
@@ -538,8 +570,12 @@ app.get('/auth/mobile-google', (req, res) => {
 app.post('/api/v1/auth/mobile-google/complete', async (req, res) => {
   try {
     const { session, idToken } = req.body;
-    const entry = mem.mobileGoogleSessions.get(session);
-    if (!entry) return res.status(404).json({ error: 'Invalid session' });
+    let role = mem.mobileGoogleSessions.get(session)?.role || null;
+    if (!role && pool) {
+      const q = await pool.query('SELECT role FROM mobile_google_sessions WHERE session_id = $1', [session]);
+      if (q.rows[0]) role = q.rows[0].role;
+    }
+    if (!role) return res.status(404).json({ error: 'Sign-in session expired. Please try again from DailyHelper.' });
     if (!googleClient || !GOOGLE_CLIENT_ID) return res.status(503).json({ error: 'Google OAuth not configured' });
     const ticket = await googleClient.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID });
     const payload = ticket.getPayload();
@@ -547,26 +583,55 @@ app.post('/api/v1/auth/mobile-google/complete', async (req, res) => {
       email: String(payload.email).toLowerCase(),
       name: payload.name || payload.email.split('@')[0],
       googleId: payload.sub,
-      role: entry.role
+      role
     });
-    entry.status = 'complete';
-    entry.token = issueJwt(user);
-    entry.user = user;
+    const token = issueJwt(user);
+    mem.mobileGoogleSessions.set(session, { status: 'complete', role, token, user, createdAt: Date.now() });
+    if (pool) {
+      try {
+        await pool.query(
+          'UPDATE mobile_google_sessions SET status = \'complete\', token = $1, user_json = $2::jsonb WHERE session_id = $3',
+          [token, JSON.stringify(user), session]
+        );
+      } catch (_) {}
+    }
     return res.json({ ok: true });
   } catch (err) {
     return res.status(401).json({ error: err.message });
   }
 });
 
-app.get('/api/v1/auth/mobile-google/poll', (req, res) => {
+app.get('/api/v1/auth/mobile-google/poll', async (req, res) => {
   const session = String(req.query.session || '');
   const entry = mem.mobileGoogleSessions.get(session);
-  if (!entry) return res.status(404).json({ status: 'expired' });
-  if (entry.status === 'complete') {
+  if (entry && entry.status === 'complete') {
     mem.mobileGoogleSessions.delete(session);
+    if (pool) {
+      pool.query('DELETE FROM mobile_google_sessions WHERE session_id = $1', [session]).catch(() => {});
+    }
     return res.json({ status: 'complete', token: entry.token, user: entry.user });
   }
-  return res.json({ status: 'pending' });
+  if (pool) {
+    try {
+      const q = await pool.query(
+        'SELECT status, token, user_json FROM mobile_google_sessions WHERE session_id = $1',
+        [session]
+      );
+      if (q.rows[0]) {
+        const row = q.rows[0];
+        if (row.status === 'complete' && row.token && row.user_json) {
+          mem.mobileGoogleSessions.delete(session);
+          await pool.query('DELETE FROM mobile_google_sessions WHERE session_id = $1', [session]);
+          return res.json({ status: 'complete', token: row.token, user: row.user_json });
+        }
+        return res.json({ status: 'pending' });
+      }
+    } catch (_) {}
+  }
+  if (entry) {
+    return res.json({ status: 'pending' });
+  }
+  return res.status(404).json({ status: 'expired' });
 });
 
 // --- Full JSONB Vault State Sync ---

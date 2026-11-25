@@ -26,7 +26,8 @@ class ReminderReceiver : BroadcastReceiver() {
                 notifId = notifId,
                 title = title,
                 body = body,
-                highPriority = true
+                highPriority = true,
+                target = if (ReminderScheduler.isProfessionalMode(context)) "jobs" else "bookings"
             )
             return
         }
@@ -61,7 +62,8 @@ class ReminderReceiver : BroadcastReceiver() {
                 notifId = if (isMorning) 7001 else 7002,
                 title = title,
                 body = body,
-                highPriority = false
+                highPriority = false,
+                target = if (isPro) "jobs" else "bookings"
             )
         }
     }

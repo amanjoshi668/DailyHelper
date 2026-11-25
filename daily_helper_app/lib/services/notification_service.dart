@@ -21,6 +21,35 @@ class NotificationService {
 
   static const MethodChannel channel = MethodChannel('com.dailyhelper.app/native');
 
+  void Function(String target)? _onNotificationTap;
+  bool _handlerRegistered = false;
+
+  void setOnNotificationTap(void Function(String target)? callback) {
+    _onNotificationTap = callback;
+    if (!kIsWeb && !_handlerRegistered) {
+      _handlerRegistered = true;
+      channel.setMethodCallHandler((call) async {
+        if (call.method == 'onNotificationTapped') {
+          final target = call.arguments?.toString() ?? 'home';
+          _onNotificationTap?.call(target);
+        }
+      });
+    }
+  }
+
+  Future<String?> consumePendingNotificationTap() async {
+    if (kIsWeb) return null;
+    try {
+      final res = await channel.invokeMethod<dynamic>('consumePendingNotificationTap');
+      if (res is String && res.isNotEmpty) return res;
+      return null;
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
   Future<bool> configureReminders({
     required bool enabled,
     bool isProfessional = false,
@@ -53,6 +82,7 @@ class NotificationService {
     required String title,
     required String body,
     bool highPriority = true,
+    String target = 'home',
   }) async {
     if (kIsWeb) return true;
     try {
@@ -61,6 +91,7 @@ class NotificationService {
         'title': title,
         'body': body,
         'highPriority': highPriority,
+        'target': target,
       });
       if (res is bool) return res;
       return true;

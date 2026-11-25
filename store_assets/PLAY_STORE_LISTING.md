@@ -25,6 +25,12 @@
 - **Data Sharing:** Contact details are shared strictly between the customer and confirmed professional for an active booking. Never sold to third parties.
 - **Security Practices:** Encrypted in transit (HTTPS/TLS); users can request account and data deletion.
 
+## Release Notes (`v1.3.0+5`)
+- Made both in-app notification banners and Android system tray notifications clickable so tapping an alert jumps straight to your Jobs or Bookings tab and refreshes live updates.
+- Replaced placeholder QR painter with a real ISO-18004 scannable UPI QR code (`PhonePe` / `Google Pay` / `Paytm` ready) plus 1-tap **Copy UPI ID** and **Open UPI App** actions.
+- Added direct worker name, skill, and custom-rate search on Explore, a progressive **Saved ♥** helpers filter chip, and automatic AI time-slot pre-selection (e.g. `"fan repair evening"` pre-selects `04:00 - 06:00 PM`).
+- Added semantic localized booking status badges, a **Recent Completed Jobs** ledger inside Professional Rates & Khata, PostgreSQL-backed stateless mobile OAuth sessions, and cancelable Google Sign-In polling.
+
 ## Release Notes (`v1.2.1+4`)
 - Fixed Android notification delivery: upgraded booking alerts to a high-priority notification channel with a monochrome status-bar icon (`ic_stat_dailyhelper`), real 60-minute-before-slot `AlarmManager` scheduling/cancellation, and live OS alerts for incoming bookings & status changes.
 - Fixed Settings Notifications toggle sync with Android `POST_NOTIFICATIONS` permission state, added **Send Test Notification** and 1-tap **Open System Notification Settings** fallback, and removed role-mismatched reminder copy.

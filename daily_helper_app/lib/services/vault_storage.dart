@@ -557,6 +557,7 @@ class VaultStorage extends ChangeNotifier {
                 title: cn.title,
                 body: cn.body,
                 highPriority: true,
+                target: _activeUser.role == UserRole.professional ? 'jobs' : 'bookings',
               );
             }
           }
@@ -701,6 +702,7 @@ class VaultStorage extends ChangeNotifier {
         title: title,
         body: body,
         highPriority: true,
+        target: _activeUser.role == UserRole.professional ? 'jobs' : 'bookings',
       );
     }
     await _persistToDisk();

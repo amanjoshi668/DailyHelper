@@ -17,11 +17,16 @@ class AuthService extends ChangeNotifier {
   AppUser _currentUser = AppUser.visitor();
   String _sessionToken = 'local_visitor';
   bool _initialized = false;
+  bool _googleAuthCancelled = false;
 
   AppUser get currentUser => _currentUser;
   String get sessionToken => _sessionToken;
   bool get isLoggedIn => !_currentUser.isGuest;
   bool get isInitialized => _initialized;
+
+  void cancelPendingGoogleSignIn() {
+    _googleAuthCancelled = true;
+  }
 
   String _hashLocalPassword(String email, String password) {
     final bytes = utf8.encode('dh_salt_${email.toLowerCase().trim()}:$password');
@@ -211,6 +216,7 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<String?> signInWithGoogle({required UserRole role}) async {
+    _googleAuthCancelled = false;
     final guestSnapshot = _currentUser.isGuest ? VaultStorage.instance.exportSnapshotMap() : null;
 
     // 1. Attempt live Cloud Run external-browser Google Sign-In handoff
@@ -226,7 +232,13 @@ class AuthService extends ChangeNotifier {
       }
       if (launched) {
         for (int i = 0; i < 30; i++) {
+          if (_googleAuthCancelled) {
+            return 'Google Sign-In cancelled. You can continue anytime with Email & Password.';
+          }
           await Future<void>.delayed(const Duration(milliseconds: 1500));
+          if (_googleAuthCancelled) {
+            return 'Google Sign-In cancelled. You can continue anytime with Email & Password.';
+          }
           final poll = await GcpBackendService.instance.pollMobileGoogleAuth(sessionId);
           if (poll == null) break;
           if (poll['status'] == 'complete' && poll['user'] != null && poll['token'] != null) {
@@ -244,10 +256,10 @@ class AuthService extends ChangeNotifier {
             return null;
           }
           if (poll['status'] == 'expired') {
-            return 'Google Sign-In session expired. Please try again.';
+            return 'Google Sign-In session expired. Please try again or use Email & Password.';
           }
         }
-        return 'Google Sign-In timed out. Complete sign-in in your browser or use Email/Password.';
+        return 'Google Sign-In did not finish. Complete sign-in in your browser or use Email & Password.';
       }
     }
 

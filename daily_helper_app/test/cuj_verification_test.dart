@@ -574,4 +574,99 @@ void main() {
     expect(nativeCalls.any((c) => c.method == 'openNotificationSettings'), isTrue);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+      'CUJ 10: Clickable Notifications, Saved Helpers Chip, Direct Name Search, AI Slot Pre-select & Real UPI QR',
+      (WidgetTester tester) async {
+    setMobileViewport(tester);
+    await tester.pumpWidget(const DailyHelperApp());
+    await tester.pumpAndSettle();
+
+    // 1. Direct name search finds Salim Ansari & non-matching search shows Reset button
+    await tester.enterText(find.byKey(const Key('explore_search_field')), 'Salim');
+    await tester.pumpAndSettle();
+    expect(find.text('Salim Ansari'), findsOneWidget);
+    expect(find.text('Ramesh Kumar'), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('explore_search_field')), 'zzznomatch');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('explore_reset_filters_btn')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('explore_reset_filters_btn')));
+    await tester.pumpAndSettle();
+    expect(find.text('Ramesh Kumar'), findsOneWidget);
+
+    // 2. AI slot hint pre-selection + Saved Helpers progressive chip
+    await tester.enterText(find.byKey(const Key('explore_search_field')), 'fan repair evening');
+    await tester.pumpAndSettle();
+    final bookRamesh = find.byKey(const Key('book_worker_btn_w1'));
+    await tester.ensureVisible(bookRamesh);
+    await tester.pumpAndSettle();
+    await tester.tap(bookRamesh);
+    await tester.pumpAndSettle();
+
+    // Evening slot chip is pre-selected!
+    final eveningChip = tester.widget<ChoiceChip>(
+      find.widgetWithText(ChoiceChip, '04:00 - 06:00 PM'),
+    );
+    expect(eveningChip.selected, isTrue);
+
+    // Save Ramesh Kumar and return -> Saved chip appears & filters Explore
+    await tester.tap(find.byKey(const Key('save_helper_btn_w1')));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('trade_chip_saved')));
+    await tester.pumpAndSettle();
+    expect(find.text('Ramesh Kumar'), findsOneWidget);
+    expect(find.text('Suresh Yadav'), findsNothing);
+
+    // 3. Clickable Notification Banner for Professional routes Rates & Khata -> Jobs
+    await AuthService.instance.registerWithEmail(
+      name: 'Ramesh Click',
+      email: 'rameshclick@example.com',
+      password: 'password123',
+      phone: '+919900144556',
+      role: UserRole.professional,
+    );
+    await tester.pumpAndSettle();
+
+    // Switch to Rates & Khata while starter "New Booking Request" notification is active
+    await tester.tap(find.byKey(const Key('pro_tab_khata')));
+    await tester.pumpAndSettle();
+    expect(find.text('Earnings Summary (0% Fee)'), findsOneWidget);
+
+    // Tap the notification banner body -> routes straight back to Jobs & dismisses banner!
+    await tester.tap(find.byKey(const Key('tap_top_notification_btn')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('New Requests'), findsOneWidget);
+    expect(find.byKey(const Key('tap_top_notification_btn')), findsNothing);
+
+    // Complete job -> verify Copy UPI ID button on UpiSettleScreen + Recent Completed Jobs in Khata
+    final acceptBtn = find.text('Accept').first;
+    await tester.ensureVisible(acceptBtn);
+    await tester.tap(acceptBtn);
+    await tester.pumpAndSettle();
+    final startBtn = find.text('Start Work').first;
+    await tester.ensureVisible(startBtn);
+    await tester.tap(startBtn);
+    await tester.pumpAndSettle();
+    final completeBtn = find.text('Complete & Collect').first;
+    await tester.ensureVisible(completeBtn);
+    await tester.tap(completeBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('copy_upi_id_btn')), findsOneWidget);
+    expect(find.byKey(const Key('open_upi_app_btn')), findsOneWidget);
+    final payDone = find.byKey(const Key('confirm_payment_received_btn'));
+    await tester.ensureVisible(payDone);
+    await tester.pumpAndSettle();
+    await tester.tap(payDone);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('pro_tab_khata')));
+    await tester.pumpAndSettle();
+    expect(find.text('Recent Completed Jobs'), findsOneWidget);
+    expect(find.textContaining('Arjun Nair'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

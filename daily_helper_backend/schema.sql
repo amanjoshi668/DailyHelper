@@ -92,6 +92,15 @@ CREATE TABLE IF NOT EXISTS bug_reports (
 );
 CREATE INDEX IF NOT EXISTS idx_bug_reports_status ON bug_reports(status);
 
+CREATE TABLE IF NOT EXISTS mobile_google_sessions (
+    session_id VARCHAR(80) PRIMARY KEY,
+    role VARCHAR(20) NOT NULL DEFAULT 'customer',
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    token TEXT,
+    user_json JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Safe additive migrations for existing live Cloud SQL databases
 ALTER TABLE worker_profiles ADD COLUMN IF NOT EXISTS daily_rate_inr INT NOT NULL DEFAULT 900;
 ALTER TABLE worker_profiles ADD COLUMN IF NOT EXISTS custom_rates JSONB NOT NULL DEFAULT '[]'::jsonb;

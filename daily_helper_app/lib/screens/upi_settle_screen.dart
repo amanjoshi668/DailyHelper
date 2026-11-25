@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/models.dart';
 import '../services/i18n.dart';
 import '../services/vault_storage.dart';
@@ -19,6 +21,7 @@ class UpiSettleScreen extends StatefulWidget {
 class _UpiSettleScreenState extends State<UpiSettleScreen> {
   late TextEditingController _amountCtrl;
   String _method = 'UPI';
+  bool _copied = false;
 
   @override
   void initState() {
@@ -44,6 +47,18 @@ class _UpiSettleScreenState extends State<UpiSettleScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  Future<void> _copyUpi(String upiId) async {
+    await Clipboard.setData(ClipboardData(text: upiId));
+    if (!mounted) return;
+    setState(() => _copied = true);
+  }
+
+  Future<void> _openUpiApp(String upiUri) async {
+    try {
+      await launchUrl(Uri.parse(upiUri), mode: LaunchMode.externalApplication);
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final vault = VaultStorage.instance;
@@ -51,7 +66,10 @@ class _UpiSettleScreenState extends State<UpiSettleScreen> {
     final pro = vault.currentProfessionalProfile;
     final theme = Theme.of(context);
     final amountText = _amountCtrl.text.trim().isEmpty ? '0' : _amountCtrl.text.trim();
-    final upiPayload = 'upi://pay?pa=${pro.upiId}&am=$amountText&cu=INR';
+    final encodedName = Uri.encodeComponent(pro.nameEn);
+    final encodedNote = Uri.encodeComponent('DailyHelper ${widget.booking.id}');
+    final upiPayload =
+        'upi://pay?pa=${Uri.encodeComponent(pro.upiId)}&pn=$encodedName&am=$amountText&cu=INR&tn=$encodedNote';
 
     return Scaffold(
       appBar: AppBar(
@@ -88,7 +106,7 @@ class _UpiSettleScreenState extends State<UpiSettleScreen> {
                 Expanded(
                   child: ChoiceChip(
                     key: const Key('settle_method_cash_chip'),
-                    label: const Center(child: Text('Cash')),
+                    label: Center(child: Text(AppStrings.tr(lang, 'cash'))),
                     selected: _method == 'Cash',
                     onSelected: (_) => setState(() => _method = 'Cash'),
                   ),
@@ -98,8 +116,8 @@ class _UpiSettleScreenState extends State<UpiSettleScreen> {
             const SizedBox(height: 20),
 
             if (_method == 'UPI') ...[
-              Center(child: UpiQrWidget(data: upiPayload, size: 156)),
-              const SizedBox(height: 10),
+              Center(child: UpiQrWidget(data: upiPayload, size: 172)),
+              const SizedBox(height: 12),
               Text(
                 pro.upiId,
                 textAlign: TextAlign.center,
@@ -112,6 +130,28 @@ class _UpiSettleScreenState extends State<UpiSettleScreen> {
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    key: const Key('copy_upi_id_btn'),
+                    onPressed: () => _copyUpi(pro.upiId),
+                    icon: Icon(_copied ? Icons.check : Icons.copy, size: 16),
+                    label: Text(
+                      _copied ? AppStrings.tr(lang, 'upiCopied') : AppStrings.tr(lang, 'copyUpiId'),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    key: const Key('open_upi_app_btn'),
+                    onPressed: () => _openUpiApp(upiPayload),
+                    icon: const Icon(Icons.open_in_new, size: 16),
+                    label: Text(AppStrings.tr(lang, 'openUpiApp')),
+                  ),
+                ],
               ),
             ] else
               Container(

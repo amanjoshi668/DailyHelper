@@ -24,6 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
   late UserRole _selectedRole;
   bool _isRegister = false;
   bool _busy = false;
+  bool _awaitingGoogle = false;
   String? _errorMsg;
   String _selectedTrade = 'electrician';
 
@@ -84,11 +85,15 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _submitGoogle() async {
     setState(() {
       _busy = true;
+      _awaitingGoogle = true;
       _errorMsg = null;
     });
     final err = await AuthService.instance.signInWithGoogle(role: _selectedRole);
     if (!mounted) return;
-    setState(() => _busy = false);
+    setState(() {
+      _busy = false;
+      _awaitingGoogle = false;
+    });
     if (err != null) {
       setState(() => _errorMsg = err);
     } else {
@@ -276,6 +281,39 @@ class _LoginScreenState extends State<LoginScreen> {
                     icon: const Icon(Icons.account_circle_outlined, size: 20),
                     label: Text(AppStrings.tr(lang, 'continueGoogle')),
                   ),
+                  if (_awaitingGoogle) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.secondaryContainer.withOpacity(0.45),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              AppStrings.tr(lang, 'waitingBrowserSignIn'),
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                          TextButton(
+                            key: const Key('login_cancel_google_btn'),
+                            onPressed: () {
+                              AuthService.instance.cancelPendingGoogleSignIn();
+                            },
+                            child: Text(AppStrings.tr(lang, 'cancel')),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 14),
 
                   TextButton(

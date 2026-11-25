@@ -35,6 +35,7 @@ object ReminderScheduler {
     const val EXTRA_BOOKING_ID = "bookingId"
     const val EXTRA_TITLE = "title"
     const val EXTRA_BODY = "body"
+    const val EXTRA_TARGET = "notif_target"
 
     private const val REQ_AM = 5201
     private const val REQ_PM = 5202
@@ -90,13 +91,15 @@ object ReminderScheduler {
         notifId: Int,
         title: String,
         body: String,
-        highPriority: Boolean = true
+        highPriority: Boolean = true,
+        target: String = "home"
     ): Boolean {
         ensureChannels(context)
         if (!hasNotificationPermission(context)) return false
 
         val openIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_TARGET, target)
         }
         val contentPending = PendingIntent.getActivity(
             context,
